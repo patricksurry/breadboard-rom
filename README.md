@@ -1,0 +1,1 @@
+py65mon -m 65c02 -l rom.bin -a 8000
