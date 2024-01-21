@@ -3,8 +3,8 @@ Provides a simple interface to a small LCD controlled by a HD44780 or equivalent
 
     lcd_init    wake up the LCD and send sequence of initialization commands
     lcd_cls     clear screen (fill with space chr $20) and set xy to 0,0
-    lcd_setxy   set cursor position to X = 0..LCD_WIDTH-1, Y = 0..LCD_HEIGHT-1
-    lcd_getxy   get current cursor position into X, Y
+    lcd_setxy   set cursor position to LCDX = 0..LCD_WIDTH-1, LCDY = 0..LCD_HEIGHT-1
+    lcd_getxy   get current cursor position into LCDX, LCDY
     lcd_putc    put chr A at the current position and advance with appropriate wrapping
     lcd_puts    put zero-terminated string in STRP with wrapping
     lcd_blit    fill the screen from a buffer in STRP skipping A bytes of padding between rows
@@ -70,10 +70,10 @@ LCD_HEIGHT = 4
 ; NB. the most common 16x1 display has its single physical row mapped to 0..$7, $40..$47
 ; as if it was 8x2.  This type isn't handled here.
 
-LCD_DATA = VIA_IORB     ; LCD D0..7 data pins mapped to VIA PORTB D0..7
-LCD_DDR  = VIA_DDRB     ; set to 0 for read DATA, #$ff to write DATA
+LCD_DATA := VIA_IORB    ; LCD D0..7 data pins mapped to VIA PORTB D0..7
+LCD_DDR  := VIA_DDRB    ; set to 0 for read DATA, #$ff to write DATA
 
-LCD_CTRL = VIA_IORA     ; RS, RW, E mapped to port A pins 5, 6, 7
+LCD_CTRL := VIA_IORA    ; RS, RW, E mapped to port A pins 5, 6, 7
 
 LCD_RS = %0010_0000     ; register select 0 = command, 1 = data
 LCD_RW = %0100_0000     ; read = 1, write = 0       ** NB we assume RW > RS below
@@ -87,6 +87,12 @@ LCD_READ    = LCD_RS | LCD_RW
 
 LCD_WAKE    = $30       ; wake value
 
+    .segment "ZEROPAGE"
+LCDX:       .res 1
+LCDY:       .res 1
+LCDPAD:     .byte 0      ; for lcd_blit
+
+    .segment "CODE"
 
 lcd_do:
     ; A = action (LCD_CMD, LCD_STATUS, LCD_READ, LCD_WRITE)
@@ -159,7 +165,9 @@ next:   ldy init_seq,x      ; x=0 on entry
         jsr lcd_do
         inx
         bne next
-done:   rts
+done:   stz LCDX
+        stz LCDY
+        rts
 
 init_seq:
         .byte %0011_1000     ; 8-bit, 2-line, 5x8 font
@@ -174,11 +182,13 @@ lcd_cls:        ; clear screen (fill with space chr $20) and set xy to 0,0
         lda #LCD_CMD
         ldy #0
         jsr lcd_do
+        stz LCDX
+        stz LCDY
         rts
 
 
-lcd_getxy:      ; get the current physical screen position X = 0..LCD_WIDTH-1(*), Y = 0..LCD_HEIGHT-1
-                ; (*) offscreen coords can have X >= LCD_WIDTH
+lcd_getxy:      ; get the current physical screen position LCDX = 0..LCD_WIDTH-1(*), LCDY = 0..LCD_HEIGHT-1
+                ; (*) offscreen coords can have LCDX >= LCD_WIDTH
     .scope _lcd_getxy
         lda #LCD_STATUS
         jsr lcd_do          ; fetch A = DDRAM addr
@@ -199,15 +209,16 @@ top:
 left:
 .endif
 .endif
-        tax
+        sta LCDX
+        sty LCDY
         rts
     .endscope
 
 
-lcd_setxy:      ; set cursor position to X = 0..LCD_WIDTH-1, Y = 0..LCD_HEIGHT-1
+lcd_setxy:      ; set cursor position to LCDX = 0..LCD_WIDTH-1, LCDY = 0..LCD_HEIGHT-1
     .scope _lcd_setxy
-        phy
-        txa
+        lda LCDX
+        ldy LCDY
 .if ::LCD_HEIGHT = 4
         cpy #2
         bmi left
@@ -227,89 +238,65 @@ top:
         tay
         lda #LCD_CMD
         jsr lcd_do
-        ply
         rts
     .endscope
 
 
-lcd_putc:       ; put chr A at the current position and advance with appropriate wrapping
+lcd_putc:       ; put chr A at the current position and advance position with proper wrapping
     .scope _lcd_putc
         tay
-        lda #LCD_WRITE
+        lda #LCD_WRITE      ; write character
         jsr lcd_do
-        jsr lcd_getxy
-        dex
-        cpx LCD_WIDTH-1
+        inc LCDX            ; update position for next write
+        lda LCDX
+        cmp #LCD_WIDTH      ; end of line?
         bmi done
-        ldx #0
-        iny
-        cpy LCD_HEIGHT
+        stz LCDX            ; wrap to start of next line
+        inc LCDY
+        lda LCDY
+        cmp #LCD_HEIGHT     ; past last row?
         bmi setxy
-        ldy #0
+        stz LCDY
 setxy:  jsr lcd_setxy
 done:   rts
     .endscope
 
 
-lcd_puts:       ; put zero-terminated string at STRP (stomped) with wrapping
+lcd_puts:       ; put A < 256 chars from STRP (preserved) starting at current position
     .scope
-        jsr lcd_getxy       ; X,Y = position where first write will occur
-loop:   lda (STRP)
-        beq done
-        phy
-        tay
-        lda #LCD_WRITE
-        jsr lcd_do
-        ply
-        inx                 ; update position for next write
-        cpx LCD_WIDTH       ; end of line?
-        bmi nowrap
-        ldx #0              ; wrap to start of next line
-        iny
-        cpy LCD_HEIGHT      ; past last row?
-        bmi setxy
+        sta TMP
         ldy #0
-setxy:  jsr lcd_setxy
-nowrap: inc STRP
-        bne loop
-        inc STRP+1
+loop:   lda (STRP),y
+        phy
+        jsr lcd_putc
+        ply
+        iny
+        cpy TMP
         bne loop
 done:   rts
     .endscope
 
 
-lcd_blit:   ; fill the screen from a buffer in STRP skipping A bytes of padding between rows
+lcd_blit:   ; fill the screen from a buffer in STRP (stomped) skipping LCDPAD bytes between rows
     .scope _lcd_blit
-        sta TMP
-        ldx #0
-        ldy #0
-        jsr lcd_setxy       ; go home
-loop:   lda (STRP)
-        phy
-        tay
-        lda #LCD_WRITE      ; write next char
+        stz LCDX            ; go to start of screen
+        stz LCDY
+        lda #LCD_CMD
+        ldy #$80            ; bit 7 for "set DDRAM offset" command, 0 for address
         jsr lcd_do
-        ply
-        inx
-        cpx LCD_WIDTH       ; wrapping?
-        bmi nowrap
-        ldx #0
-        iny
-        cpy LCD_HEIGHT
-        beq done            ; filled screen?
-        lda TMP             ; skip padding between rows
-        beq setxy
+loop:   lda #LCD_WIDTH
+        jsr lcd_puts
+        lda STRP
         clc
-        adc STRP
+        adc #LCD_WIDTH
+        bcc pad
+        inc STRP+1
+        clc
+pad:    adc LCDPAD
         sta STRP
-        bcc setxy
+        bcc next
         inc STRP+1
-setxy:  jsr lcd_setxy
-nowrap: inc STRP
+next:   lda LCDY            ; wrapped back to start?
         bne loop
-        inc STRP+1
-        bne loop
-done:   rts
-
-
+        rts
     .endscope

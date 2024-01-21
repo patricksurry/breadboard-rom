@@ -9,3 +9,4 @@ rom: rom.bin
 
 rom.bin: rom.asm
 	$(CL65) -g --verbose --target none --config breadboard.cfg -l rom.lst -m rom.map -Ln rom.sym -o rom.bin rom.asm
+	python lint65.py rom.lst
