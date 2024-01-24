@@ -34,24 +34,26 @@ KB_KEY8:    .res 1               ; last full 8-bit character received
     .segment "CODE"
 
 kb_init:
-        lda #VIA_SR_IN_CB1      ; shift in using external (CB1) clock
+        lda VIA_ACR
+        and #(255-VIA_SR_MASK)
+        ora #VIA_SR_IN_CB1      ; shift in using external (CB1) clock
         sta VIA_ACR
         lda #(VIA_IER_SET | VIA_INT_SR)     ; enable interrupt on shift complete
         sta VIA_IER
         rts
 
 kb_getc:
-        lda KB_KEY7
+        lda KB_KEY7     ; has top-bit set on ready
         bpl kb_getc
-        eor #$80
-        stz KB_KEY7
+        and #$7f        ; clear top bit
+        stz KB_KEY7     ; key taken
         rts
 
 kb_isr:
         pha
         lda VIA_SR
         sta KB_KEY8
-        ora #$80
+        ora #$80        ; flag key ready
         sta KB_KEY7
         pla
         rti

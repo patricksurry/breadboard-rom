@@ -3,66 +3,134 @@
     .feature underline_in_numbers
     .feature string_escapes
 
-SLOW_CLOCK = 0
+PYMON = 0
 
-    .segment "ZEROPAGE"
-STRP:   .res 2
-TMP:    .res 1
+    .if PYMON
+        .out "** Building debug ROM for pymon **"
+GETC    := pymon_getc
+    .else
+GETC    := kb_getc
+    .endif
 
-    .segment "CODE"
+PUTC  := lcd_putc           ; patched internally to route to pymon_putc
+
+    .include "via.asm"
+    .include "kb.asm"
+    .include "lcd.asm"
+    .include "morse.asm"
+    .include "speaker.asm"
+    .include "wozmon.asm"
+
+    .segment "VECTORS"      ; see http://6502.org/tutorials/interrupts.html
+
+nmi_vec:    .word 0
+reset_vec:  .word hello     ; after RESB held low for 2 clocks
+;TODO currently ignore BRK
+irqbrk_vec: .word kb_isr    ; on irq or brk
+
+    .segment "INIT"
 
 hello:
-        lda #$ff            ; set both VIA ports for output
-        sta VIA_DDRA
-        sta VIA_DDRB
-        lda #$7f
-        sta VIA_IFR         ; clear all interrupt flags (write 1 to bit 0-6)
-        sta VIA_IER         ; disable all interrupts
+        ldx #$ff
+        txs                 ; init stack
+        stx VIA_DDRA        ; set both VIA ports for output
+        stx VIA_DDRB
+
+        ;TODO not needed after reset?
+;        lda #$7f
+;        sta VIA_IFR         ; clear all interrupt flags (write 1 to bit 0-6)
+;        sta VIA_IER         ; disable all interrupts by writing 1s with bit7=0 (clear)
+
+    .if PYMON = 1
+_morse_emit := morse_puts
+    .else
+_morse_emit := spk_morse
+    .endif
+
+        lda #<_morse_emit
+        sta morse_emit
+        lda #>_morse_emit
+        sta morse_emit+1
+
+        lda #('A' | $80)    ; elide A^S (wait)
+        jsr morse_send
+        lda #'S'
+        jsr morse_send
 
         jsr kb_init         ; set up KB shift register to trigger interrupt
         jsr lcd_init        ; show a startup display
 
-        lda #<startup
-        sta STRP
-        lda #>startup
-        sta STRP+1
-        lda #(donut - startup)
+        cli                 ; enable interrupts by clearing the disable flag
+
+        lda #<splash        ; show splash
+        sta LCDBUFP
+        lda #>splash
+        sta LCDBUFP+1
+        lda #(donut - splash)
         jsr lcd_puts
 
-        lda #$ff
-        jsr delay
-        lda #$ff
-        jsr delay
+        lda #'K'
+        jsr morse_send       ; good to go
 
+        lda #'e'
+        jsr PUTC
+        lda VIA_IER
+        jsr _wozmon::PRBYTE
+
+        lda #'f'
+        jsr PUTC
+        lda VIA_IFR
+        jsr _wozmon::PRBYTE
+
+        lda #'a'
+        jsr PUTC
+        lda VIA_ACR
+        jsr _wozmon::PRBYTE
+
+        lda #'s'
+        jsr PUTC
+        lda VIA_SR
+        jsr _wozmon::PRBYTE
+
+        jmp _wozmon::main
+
+    .if 0
         lda #<(donut + 43*2 + 2)
-        sta STRP
+        sta LCDBUFP
         lda #>(donut + 43*2 + 2)
-        sta STRP+1
+        sta LCDBUFP+1
         lda #23
         sta LCDPAD
         jsr lcd_blit
 
 forever:
-        jsr kb_getc
-        jsr lcd_putc
         jmp forever
+    .endif
 
-; delay 9*(256*A+Y)+8 cycles = 2304 A + 9 Y + 20 cycles
-; at 1MHz about 2.3 A ms + (9Y + 20) us
+; delay 9*(256*A+Y)+12 cycles = 2304 A + 9 Y + 12 cycles
+; at 1MHz about 2.3 A ms + (9Y + 12) us
+; max delay 9*65535+12 is about 590ms
+; credit http://forum.6502.org/viewtopic.php?f=12&t=5271&start=0#p62581
 delay:
-    .if .not SLOW_CLOCK
         cpy #1      ; 2 cycles
         dey         ; 2 cycles
         sbc #0      ; 2 cycles
         bcs delay   ; 2 cycles + 1 if branch occurs (same page)
-    .endif
         rts         ; 6 cycles (+ 6 for call)
 
-    .include "via.asm"
-    .include "kb.asm"
-    .include "lcd.asm"
+    .if PYMON
+pymon_putc:
+        sta $f001
+        rts
+pymon_getc:
+        lda $f004
+        beq pymon_getc
+        rts
+    .endif
 
-startup:
+    .segment "DATA"
+
+splash:
         .byte "    ___      ___    "
         .byte "   (o o)    (o o)   "
         .byte "  (  V  )  (  V  )  "
@@ -92,12 +160,3 @@ donut:      ; https://www.a1k0n.net/2011/07/20/donut-math.html
         .byte "                 .........,,,,,,,,,        "
         .byte "                    .............          "
         .byte "                                           "
-
-    .include "wozmon.asm"
-
-    .segment "VECTORS"      ; see http://6502.org/tutorials/interrupts.html
-
-nmi_vec:    .word 0
-reset_vec:  .word hello     ; after RESB held low for 2 clocks
-;TODO kb_isr detect brk v irq?
-irqbrk_vec: .word 0         ; on irq or brk

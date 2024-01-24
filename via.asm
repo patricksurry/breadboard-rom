@@ -8,12 +8,9 @@ VIA_IORB := VIA + $0    ; port a/b latches
 VIA_IORA := VIA + $1
 VIA_DDRB := VIA + $2    ; data direction for port a/b pins (1=output, 0=input`)
 VIA_DDRA := VIA + $3
-VIA_T1CL := VIA + $4    ; timer 1 lo/hi counter
-VIA_T1CH := VIA + $5
-VIA_T1LL := VIA + $6    ; timer 1 latches
-VIA_T1LH := VIA + $7
-VIA_T2CL := VIA + $8    ; timer 2 lo/hi counter
-VIA_T2CH := VIA + $9
+VIA_T1C  := VIA + $4    ; timer 1 lo/hi counter
+VIA_T1L  := VIA + $6    ; timer 1 latches
+VIA_T2C  := VIA + $8    ; timer 2 lo/hi counter
 VIA_SR   := VIA + $a    ; shift register (timers, shift, port a/b latching)
 VIA_ACR  := VIA + $b    ; aux control register
 VIA_PCR  := VIA + $c    ; peripheral control register (r/w handshake mode for C[AB][12])
@@ -22,6 +19,8 @@ VIA_IER  := VIA + $e    ; write bit 7 hi + bits to set, or bit 7 lo + bits to cl
 VIA_IORA_ := VIA + $f
 
 ; three VIA_SR control bits  ...x xx..
+VIA_SR_MASK     = %0001_1100
+
 VIA_SR_DISABLED = %0000_0000
 VIA_SR_IN_T2    = %0000_0100
 VIA_SR_IN_PHI2  = %0000_1000
@@ -30,6 +29,14 @@ VIA_SR_OUT_T2FR = %0001_0000     ; T2 free-running
 VIA_SR_OUT_T2   = %0001_0100
 VIA_SR_OUT_PHI2 = %0001_1000
 VIA_SR_OUT_CB1  = %0001_1100
+
+; two VIA_T1 control bits xx.. ....
+VIA_T1_MASK     = %1100_0000
+
+VIA_T1_ONCE     = %0000_0000
+VIA_T1_CTS      = %0100_0000
+VIA_T1_PB7_ONCE = %1000_0000
+VIA_T1_PB7_CTS  = %1100_0000
 
 VIA_IER_SET = %1000_0000    ; set accompanying set bits in IER
 VIA_IER_CLR = %0000_0000    ; clr accompanying set bits in IER

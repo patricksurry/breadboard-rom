@@ -72,7 +72,6 @@ LCD_HEIGHT = 4
 
 LCD_DATA := VIA_IORB    ; LCD D0..7 data pins mapped to VIA PORTB D0..7
 LCD_DDR  := VIA_DDRB    ; set to 0 for read DATA, #$ff to write DATA
-
 LCD_CTRL := VIA_IORA    ; RS, RW, E mapped to port A pins 5, 6, 7
 
 LCD_RS = %0010_0000     ; register select 0 = command, 1 = data
@@ -85,12 +84,13 @@ LCD_STATUS  = LCD_RW
 LCD_WRITE   = LCD_RS
 LCD_READ    = LCD_RS | LCD_RW
 
-LCD_WAKE    = $30       ; wake value
+LCD_WAKE    = %0011_0000       ; wake value $30 (8 bit, 2 line)
 
     .segment "ZEROPAGE"
 LCDX:       .res 1
 LCDY:       .res 1
 LCDPAD:     .byte 0      ; for lcd_blit
+LCDBUFP:    .res 2
 
     .segment "CODE"
 
@@ -107,8 +107,9 @@ lcd_do:
         ora #LCD_E
         sta LCD_CTRL        ; enable to read status
 busy:   lda LCD_DATA
+    .if .not ::PYMON
         bmi busy            ; wait for bit 7 to clear
-
+    .endif
         stx LCD_CTRL        ; set up new action, clearing E
         cpx #LCD_RW         ; RW=1 (read)?
         bmi wc              ; else write or cmd
@@ -165,13 +166,10 @@ next:   ldy init_seq,x      ; x=0 on entry
         jsr lcd_do
         inx
         bne next
-done:   stz LCDX
-        stz LCDY
-        rts
+done:   jmp lcd_cls
 
 init_seq:
         .byte %0011_1000     ; 8-bit, 2-line, 5x8 font
-        .byte %0000_0000     ; clear/home
         .byte %0000_0110     ; after r/w inc DDRAM, no display shift
         .byte %0000_1100     ; display on, cursor off, blink off
         .byte $ff
@@ -180,7 +178,7 @@ init_seq:
 
 lcd_cls:        ; clear screen (fill with space chr $20) and set xy to 0,0
         lda #LCD_CMD
-        ldy #0
+        ldy #%0000_0000     ; clear/home
         jsr lcd_do
         stz LCDX
         stz LCDY
@@ -242,11 +240,60 @@ top:
     .endscope
 
 
-lcd_putc:       ; put chr A at the current position and advance position with proper wrapping
+lcd_putc:       ; put printable chr A (stomped) at the current position, handle bksp, tab, CR, LF
     .scope _lcd_putc
+        cmp #$0A        ; LF
+        beq nl
+        cmp #$0D        ; CR
+        beq nl
+        cmp #$09        ; TAB
+        beq tab
+        cmp #$08        ; BKSP
+        beq bksp
+        jmp lcd_putb    ; else just write it and return from there
+
+bksp:   pha             ; go back, write a space, go back again
+back:   dec LCDX
+        bpl erase
+        lda #LCD_WIDTH-1
+        sta LCDX
+        dec LCDY
+        bpl erase
+        lda #LCD_HEIGHT-1
+        sta LCDY
+erase:  jsr lcd_setxy
+        pla
+        eor #$08        ; first pass?
+        bne done
+        pha
+        lda #' '
+        jsr lcd_putb
+        bra back
+
+nl:     ldy #$ff    ; advance until all bits in LCDX are clear (wrap)
+        bra fill
+tab:    ldy #$03    ; advance until lower two bits in LCDX are cleara
+fill:   phy
+        lda #' '    ; fill until LCDX zeros all bits in Y
+        jsr lcd_putb
+        ply
+        tya
+        and LCDX
+        bne fill    ; done fill?
+done:   rts
+
+    .endscope
+
+
+lcd_putb:       ; put byte A at the current position and advance position with proper wrapping
+    .scope _lcd_putb
         tay
-        lda #LCD_WRITE      ; write character
+    .if ::PYMON
+        jsr pymon_putc
+    .else
+        lda #LCD_WRITE      ; write character Y
         jsr lcd_do
+    .endif
         inc LCDX            ; update position for next write
         lda LCDX
         cmp #LCD_WIDTH      ; end of line?
@@ -262,22 +309,24 @@ done:   rts
     .endscope
 
 
-lcd_puts:       ; put A < 256 chars from STRP (preserved) starting at current position
+lcd_puts:       ; put A < 256 chars from LCDBUFP (preserved) starting at current position
     .scope
-        sta TMP
+        tax
         ldy #0
-loop:   lda (STRP),y
+loop:   lda (LCDBUFP),y
         phy
+        phx
         jsr lcd_putc
+        plx
         ply
         iny
-        cpy TMP
+        dex
         bne loop
-done:   rts
+        rts
     .endscope
 
 
-lcd_blit:   ; fill the screen from a buffer in STRP (stomped) skipping LCDPAD bytes between rows
+lcd_blit:   ; fill the screen from a buffer in LCDBUFP (stomped) skipping LCDPAD bytes between rows
     .scope _lcd_blit
         stz LCDX            ; go to start of screen
         stz LCDY
@@ -286,16 +335,16 @@ lcd_blit:   ; fill the screen from a buffer in STRP (stomped) skipping LCDPAD by
         jsr lcd_do
 loop:   lda #LCD_WIDTH
         jsr lcd_puts
-        lda STRP
+        lda LCDBUFP
         clc
         adc #LCD_WIDTH
         bcc pad
-        inc STRP+1
+        inc LCDBUFP+1
         clc
 pad:    adc LCDPAD
-        sta STRP
+        sta LCDBUFP
         bcc next
-        inc STRP+1
+        inc LCDBUFP+1
 next:   lda LCDY            ; wrapped back to start?
         bne loop
         rts
