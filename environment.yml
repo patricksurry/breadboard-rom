@@ -1,0 +1,13 @@
+name: breadboard-rom
+dependencies:
+  - pip
+  - python=3
+  - pip:
+    - pyserial
+    - pyaudio   # also brew install portaudio for mac
+    - numpy     # manually install before aubio
+    - aubio
+    - flake8
+    - flake8-black
+    - mypy
+

@@ -28,12 +28,14 @@ Interrupt Enable Register ($0E) set bit 2 to enable corresponding interrupt
     */
 
     .segment "ZEROPAGE"
+
 KB_KEY7:    .res 1               ; bit 7 indicates key ready, with low seven bits of last chr
 KB_KEY8:    .res 1               ; last full 8-bit character received
 
     .segment "CODE"
 
-kb_init:
+kb_init:    ; () -> nil const X, Y
+    ; initialize VIA shift-in from keyboard
         lda VIA_ACR
         and #(255-VIA_SR_MASK)
         ora #VIA_SR_IN_CB1      ; shift in using external (CB1) clock
@@ -42,18 +44,20 @@ kb_init:
         sta VIA_IER
         rts
 
-kb_getc:
+kb_getc:    ; () -> A const X, Y
+    ; wait for a keypress to appear in KB_KEY7 and return with bit 7 clear
         lda KB_KEY7     ; has top-bit set on ready
         bpl kb_getc
         and #$7f        ; clear top bit
         stz KB_KEY7     ; key taken
         rts
 
-kb_isr:
+kb_isr:     ; () -> nil const A, X, Y
+    ; handle interrupt on shift in complete
         pha
-        lda VIA_SR
-        sta KB_KEY8
+        lda VIA_SR      ; fetch the value shifted in
+        sta KB_KEY8     ; store original
         ora #$80        ; flag key ready
-        sta KB_KEY7
+        sta KB_KEY7     ; store with top bit set for getc
         pla
         rti

@@ -51,9 +51,9 @@ VIA_INT_CA1 = %0000_0010    ; set on CA1 active edge
 VIA_INT_CA2 = %0000_0001    ; set on CA2 active edge
 
 
-.if 0
-/* test routine that rolls a bit back and forth forever on port b */
-rollpbbit:
+.if DEBUG
+rollpbbit:  ; () -> nil const X, Y
+    ; test routine that rolls a bit back and forth forever on port b
     .scope _rollpbbit
         inc
         sec

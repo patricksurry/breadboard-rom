@@ -8,10 +8,6 @@ MODE:   .res 1                          ; $00 = XAM, $74 = STOR, $B8 = BLOK XAM
 
 IN    := $0200                          ; Input buffer
 
-BKSP    = $08                           ; character constants
-CR      = $0D
-ESC     = $1B
-
     .segment "WOZMON"
 
     .scope _wozmon

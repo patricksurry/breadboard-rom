@@ -70,13 +70,15 @@ LCD_HEIGHT = 4
 ; NB. the most common 16x1 display has its single physical row mapped to 0..$7, $40..$47
 ; as if it was 8x2.  This type isn't handled here.
 
-LCD_DATA := VIA_IORB    ; LCD D0..7 data pins mapped to VIA PORTB D0..7
-LCD_DDR  := VIA_DDRB    ; set to 0 for read DATA, #$ff to write DATA
-LCD_CTRL := VIA_IORA    ; RS, RW, E mapped to port A pins 5, 6, 7
+LCD_DATA := VIA_IORA        ; LCD D0..7 data pins mapped to VIA PORTA D0..7
+LCD_DDR  := VIA_DDRA        ; set to 0 for read DATA, #$ff to write DATA
+LCD_CTRL := VIA_IORB        ; RS, RW, E mapped to port B pins 0, 1, 2
+LCD_CDR  := VIA_DDRB
 
-LCD_RS = %0010_0000     ; register select 0 = command, 1 = data
-LCD_RW = %0100_0000     ; read = 1, write = 0       ** NB we assume RW > RS below
-LCD_E  = %1000_0000     ; toggle high to read/write
+LCD_RS = %0000_0001         ; register select 0 = command, 1 = data
+LCD_RW = %0000_0010         ; read = 1, write = 0
+.assert LCD_RW > LCD_RS, error, "lcd_do assumes RW pin > RS pin"
+LCD_E  = %0000_0100         ; toggle high to read/write
 
 ; Four actions based on RW/RS combinations
 LCD_CMD     = 0
@@ -84,17 +86,22 @@ LCD_STATUS  = LCD_RW
 LCD_WRITE   = LCD_RS
 LCD_READ    = LCD_RS | LCD_RW
 
-LCD_WAKE    = %0011_0000       ; wake value $30 (8 bit, 2 line)
+LCD_WAKE    = %0011_0000    ; wake value $30 (8 bit, 2 line)
 
     .segment "ZEROPAGE"
 LCDX:       .res 1
 LCDY:       .res 1
-LCDPAD:     .byte 0      ; for lcd_blit
+LCDPAD:     .byte 0         ; for lcd_blit
 LCDBUFP:    .res 2
 
     .segment "CODE"
 
-lcd_do:
+lcd_cmd:    ; (Y) -> nil const X
+    ; fall through to lcd_do with Y = data
+    lda #LCD_CMD
+
+lcd_do:     ; (A, Y) -> A const X
+    ; perform the action A with data Y (for output actions)
     ; A = action (LCD_CMD, LCD_STATUS, LCD_READ, LCD_WRITE)
     ; Y = data (for LCD_CMD and LCD_WRITE)
     ; on return A contains result for LCD_STATUS or LCD_READ
@@ -111,7 +118,7 @@ busy:   lda LCD_DATA
         bmi busy            ; wait for bit 7 to clear
     .endif
         stx LCD_CTRL        ; set up new action, clearing E
-        cpx #LCD_RW         ; RW=1 (read)?
+        cpx #LCD_RW         ; RW=1 (read)?      NB ** assumes LCD_RW > LCD_RS
         bmi wc              ; else write or cmd
 
         cpx #LCD_STATUS
@@ -138,9 +145,16 @@ done:   plx
     .endscope
 
 
-lcd_init:           ; wake up the LCD and send sequence of initialization commands
+lcd_init:   ; () -> nil
+    ; wake up the LCD and send sequence of initialization commands
     .scope _lcd_init
-        ldx #3      ; beetlejuice, beetlejuice, beetlejuice
+        lda #$ff
+        sta LCD_DDR         ; set all data bits for output
+        lda LCD_CDR
+        ora #(LCD_E | LCD_RS | LCD_RW)
+        sta LCD_CDR         ; set ctrl bits to output
+
+        ldx #3              ; beetlejuice, beetlejuice, beetlejuice
 wakeywakey:
         ; assume that manual reset is at least 40ms+ after power on, so skip explicit initial wait
         lda #LCD_CMD
@@ -149,11 +163,11 @@ wakeywakey:
         cpx #3
         bne short
         ; wait 5ms+ after first call
-        lda #2      ; 2*2304 + 9*42 + 20 = 5006 cycles
+        lda #2              ; 2*2304 + 9*42 + 20 = 5006 cycles
         ldy #42
         bra wait
 short:  ; wait 160us+ after second and third call
-        lda #0      ; 2*0 + 9*16 + 20 = 164 cycles
+        lda #0              ; 2*0 + 9*16 + 20 = 164 cycles
         ldy #16
 wait:   jsr delay
         dex
@@ -162,8 +176,7 @@ wait:   jsr delay
 next:   ldy init_seq,x      ; x=0 on entry
         cpy #$ff
         beq done
-        lda #LCD_CMD
-        jsr lcd_do
+        jsr lcd_cmd
         inx
         bne next
 done:   jmp lcd_cls
@@ -176,17 +189,18 @@ init_seq:
     .endscope
 
 
-lcd_cls:        ; clear screen (fill with space chr $20) and set xy to 0,0
-        lda #LCD_CMD
+lcd_cls:    ; () -> nil const X
+    ; clear screen (fill with space chr $20) and set xy to 0,0
         ldy #%0000_0000     ; clear/home
-        jsr lcd_do
+        jsr lcd_cmd
         stz LCDX
         stz LCDY
         rts
 
 
-lcd_getxy:      ; get the current physical screen position LCDX = 0..LCD_WIDTH-1(*), LCDY = 0..LCD_HEIGHT-1
-                ; (*) offscreen coords can have LCDX >= LCD_WIDTH
+lcd_getxy:  ; () -> nil const X
+    ; get the current physical screen position LCDX = 0..LCD_WIDTH-1(*), LCDY = 0..LCD_HEIGHT-1
+    ; (*) offscreen coords can have LCDX >= LCD_WIDTH
     .scope _lcd_getxy
         lda #LCD_STATUS
         jsr lcd_do          ; fetch A = DDRAM addr
@@ -213,7 +227,8 @@ left:
     .endscope
 
 
-lcd_setxy:      ; set cursor position to LCDX = 0..LCD_WIDTH-1, LCDY = 0..LCD_HEIGHT-1
+lcd_setxy:  ; () -> nil const X
+    ; set cursor position to LCDX = 0..LCD_WIDTH-1, LCDY = 0..LCD_HEIGHT-1
     .scope _lcd_setxy
         lda LCDX
         ldy LCDY
@@ -234,25 +249,26 @@ top:
 .endif
         ora #$80            ; set bit 7 for "set DDRAM offset" command
         tay
-        lda #LCD_CMD
-        jsr lcd_do
+        jsr lcd_cmd
         rts
     .endscope
 
 
-lcd_putc:       ; put printable chr A (stomped) at the current position, handle bksp, tab, CR, LF
+lcd_putc:   ; (A) -> nil const X
+    ; put printable chr A (stomped) at the current position, handle bksp, tab, CR, LF
     .scope _lcd_putc
-        cmp #$0A        ; LF
+        cmp #LF
         beq nl
-        cmp #$0D        ; CR
+        cmp #CR
         beq nl
-        cmp #$09        ; TAB
+        cmp #TAB
         beq tab
-        cmp #$08        ; BKSP
+        cmp #BKSP
         beq bksp
-        jmp lcd_putb    ; else just write it and return from there
+        jmp lcd_putb        ; else just write it and return from there
 
-bksp:   pha             ; go back, write a space, go back again
+        ; go back, write a space, go back again
+bksp:   pha                 ; save nozero chr as flag
 back:   dec LCDX
         bpl erase
         lda #LCD_WIDTH-1
@@ -263,29 +279,30 @@ back:   dec LCDX
         sta LCDY
 erase:  jsr lcd_setxy
         pla
-        eor #$08        ; first pass?
-        bne done
+        beq done            ; first pass?
+        lda #0
         pha
         lda #' '
         jsr lcd_putb
         bra back
 
-nl:     ldy #$ff    ; advance until all bits in LCDX are clear (wrap)
+nl:     ldy #$ff            ; advance until all bits in LCDX are clear (wrap)
         bra fill
-tab:    ldy #$03    ; advance until lower two bits in LCDX are cleara
+tab:    ldy #$03            ; advance until lower two bits in LCDX are cleara
 fill:   phy
-        lda #' '    ; fill until LCDX zeros all bits in Y
+        lda #' '            ; fill until LCDX zeros all bits in Y
         jsr lcd_putb
         ply
         tya
         and LCDX
-        bne fill    ; done fill?
+        bne fill            ; done fill?
 done:   rts
 
     .endscope
 
 
-lcd_putb:       ; put byte A at the current position and advance position with proper wrapping
+lcd_putb:   ; (A) -> nil const X
+    ; put byte A at the current position and advance position with proper wrapping
     .scope _lcd_putb
         tay
     .if ::PYMON
@@ -304,12 +321,14 @@ lcd_putb:       ; put byte A at the current position and advance position with p
         cmp #LCD_HEIGHT     ; past last row?
         bmi setxy
         stz LCDY
-setxy:  jsr lcd_setxy
+setxy:  jmp lcd_setxy
+
 done:   rts
     .endscope
 
 
-lcd_puts:       ; put A < 256 chars from LCDBUFP (preserved) starting at current position
+lcd_puts:   ; (A) -> nil
+    ; put A < 256 chars from LCDBUFP (preserved) starting at current position
     .scope
         tax
         ldy #0
@@ -326,13 +345,13 @@ loop:   lda (LCDBUFP),y
     .endscope
 
 
-lcd_blit:   ; fill the screen from a buffer in LCDBUFP (stomped) skipping LCDPAD bytes between rows
+lcd_blit:   ; () -> nil
+    ; fill the screen from a buffer in LCDBUFP (stomped) skipping LCDPAD bytes between rows
     .scope _lcd_blit
         stz LCDX            ; go to start of screen
         stz LCDY
-        lda #LCD_CMD
         ldy #$80            ; bit 7 for "set DDRAM offset" command, 0 for address
-        jsr lcd_do
+        jsr lcd_cmd
 loop:   lda #LCD_WIDTH
         jsr lcd_puts
         lda LCDBUFP

@@ -7,22 +7,28 @@ spk_duty: .res 2
 
     .segment "CODE"
 
-spk_tone:
+spk_init:   ; () -> nil const X, Y
+    lda VIA_DDRB
+    ora #$80    ; PB7 to output
+    sta VIA_DDRB
+    rts
+
+spk_tone:   ; (A) -> nil
+    ; start playing midi note number in A (A=69 for A4 @ 440Hz; A=0 for C(-2))
     .scope _spk_tone
-        ; A = note index, A0 = 0, A4 = 48
-        ldy #0
+        ldy #0              ; rewrite A as Y * 12 + (A % 12)
 noct:   cmp #12             ; Y = A // 12 (octave shifts)
         bmi found
         sec
         sbc #12
         iny
         bra noct
-found:  tax
+found:  tax                 ; A is the remainder used to index the low octave
         lda spk_octave, x   ; get hi/lo from octave lookup
         sta spk_duty
         lda spk_octave+12, x
         sta spk_duty+1
-halve:  dey                 ; halve y times
+halve:  dey                 ; halve the note value Y times to get the duty cycle
         bmi done
         lsr spk_duty+1
         ror spk_duty
@@ -39,7 +45,8 @@ done:   lda VIA_ACR
         rts
     .endscope
 
-spk_morse:
+spk_morse:  ; (Y, C) -> nil
+    ; emit morse signal C=on/off for Y units (1,2,3,4)
     .scope _spk_morse
         bcc wait        ; signal is normally off
         phy
@@ -50,75 +57,58 @@ wait:   jsr morse_delay
         ; fall through to spk_off
     .endscope
 
-spk_off:
+spk_off:    ; () -> nil const X, Y
+    ; turn off the speaker
         lda VIA_ACR
         and #(255-VIA_T1_MASK)
         ora #VIA_T1_ONCE    ; disable PB7 square wave
         sta VIA_ACR
         rts
 
-spk_octave:
-        .byte $06   ; A     0 27.5Hz  N=18182
-        .byte $09   ; A# Bb 0 29.1Hz  N=17161
-        .byte $46   ; B     1 30.9Hz  N=16198
-        .byte $b9   ; C     1 32.7Hz  N=15289
-        .byte $5f   ; C# Db 1 34.6Hz  N=14431
-        .byte $35   ; D     1 36.7Hz  N=13621
-        .byte $38   ; D# Eb 1 38.9Hz  N=12856
-        .byte $67   ; E     1 41.2Hz  N=12135
-        .byte $be   ; F     1 43.7Hz  N=11454
-        .byte $3b   ; F# Gb 1 46.2Hz  N=10811
-        .byte $dc   ; G     1 49.0Hz  N=10204
-        .byte $9f   ; G# Ab 1 51.9Hz  N=9631
-    ; hi bytes
-        .byte $47
-        .byte $43
-        .byte $3f
-        .byte $3b
-        .byte $38
-        .byte $35
-        .byte $32
-        .byte $2f
-        .byte $2c
-        .byte $2a
-        .byte $27
-        .byte $25
-
-
-
-spk_beep:
-    ; enable speaker
-        ;TODO
-spk_wait:
-    ; wait for X * 100ms
-    .scope _spk_wait
-more:   lda #42     ; about 100ms
-        ldy #0
-        jsr delay
-        dex
-        bne more
-    ; disable speaker
-        ;TODO
-        rts
-    .endscope
-
-
 /*
-tone of the i-th key on a 88 key piano, 49 = A-440
-freq = 440 * pow(2, (i-49)/12)
-at clock freq F=1Mhz
-cycles = F/freq = 1e6/440 * pow(2, i-49/12)
-VIA timer should be half = 1e6/440 * pow(2, i-49/12 - 1)
+The frequency of the i-th key on a 88 key piano, with i=69 corresponding to A4 @ 440Hz,
+is equal to 440 * pow(2, (i-69)/12).  At a clock frequency F=1MHz we see
+N = F/freq = 1e6/(440 * pow(2, i-69/12)) cycles per period.
+The VIA timer needs to invert twice, so the duty cycle is half of that.
+Here's some python code to calculate the frequencies for the lowest octave (with the longest duty cycle)
+since we can calculate other octaves by repeatedly halving:
 
 from math import pow
 
 clock = 1e6
-notes = "A A# B C C# D D# E F F# G G#".split()
-for i in range(0, 12): # 88):
-    freq = 440 * pow(2, (i-48)/12.)
+notes = "C C# D D# E F F# G G# A A# B".split()
+for i in range(0, 12):
+    freq = 440 * pow(2, (i-69)/12.)
     duty = round(clock/freq/2)
-    octave = (i+10)//12
+    octave = (i-21)//12
     note = notes[i%12]
     print(f".byte ${duty & 0xff:02x}, ${duty >> 8:02x}   ; {note:3s}{octave} {freq:.1f}Hz  N={duty}")
-
 */
+
+    .segment "DATA"
+spk_octave:         ; note octave freq duty
+        .byte $e4   ; C     -2  8.2Hz  N=61156     midi note 0 is C(-2) @ 8.1758 Hz
+        .byte $7c   ; C# Db -2  8.7Hz  N=57724
+        .byte $d4   ; D     -2  9.2Hz  N=54484
+        .byte $e2   ; D# Eb -2  9.7Hz  N=51426
+        .byte $9c   ; E     -2 10.3Hz  N=48540
+        .byte $f7   ; F     -2 10.9Hz  N=45815
+        .byte $ec   ; F# Gb -2 11.6Hz  N=43244
+        .byte $71   ; G     -2 12.2Hz  N=40817
+        .byte $7e   ; G# Ab -2 13.0Hz  N=38526
+        .byte $0c   ; A     -1 13.8Hz  N=36364
+        .byte $13   ; A# Bb -1 14.6Hz  N=34323
+        .byte $8c   ; B     -1 15.4Hz  N=32396
+    ; hi bytes
+        .byte $ee
+        .byte $e1
+        .byte $d4
+        .byte $c8
+        .byte $bd
+        .byte $b2
+        .byte $a8
+        .byte $9f
+        .byte $96
+        .byte $8e
+        .byte $86
+        .byte $7e

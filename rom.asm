@@ -3,7 +3,8 @@
     .feature underline_in_numbers
     .feature string_escapes
 
-PYMON = 0
+PYMON = 0   ; emulation with no actual hardware
+DEBUG = 0   ; include additional debugging code
 
     .if PYMON
         .out "** Building debug ROM for pymon **"
@@ -13,6 +14,12 @@ GETC    := kb_getc
     .endif
 
 PUTC  := lcd_putc           ; patched internally to route to pymon_putc
+
+BKSP    = $08                           ; special char constants
+TAB     = $09
+LF      = $0A
+CR      = $0D
+ESC     = $1B
 
     .include "via.asm"
     .include "kb.asm"
@@ -33,13 +40,6 @@ irqbrk_vec: .word kb_isr    ; on irq or brk
 hello:
         ldx #$ff
         txs                 ; init stack
-        stx VIA_DDRA        ; set both VIA ports for output
-        stx VIA_DDRB
-
-        ;TODO not needed after reset?
-;        lda #$7f
-;        sta VIA_IFR         ; clear all interrupt flags (write 1 to bit 0-6)
-;        sta VIA_IER         ; disable all interrupts by writing 1s with bit7=0 (clear)
 
     .if PYMON = 1
 _morse_emit := morse_puts
@@ -47,12 +47,14 @@ _morse_emit := morse_puts
 _morse_emit := spk_morse
     .endif
 
+        jsr spk_init
+
         lda #<_morse_emit
         sta morse_emit
         lda #>_morse_emit
         sta morse_emit+1
 
-        lda #('A' | $80)    ; elide A^S (wait)
+        lda #('A' | $80)    ; prosign "wait" elides A^S
         jsr morse_send
         lda #'S'
         jsr morse_send
@@ -62,16 +64,19 @@ _morse_emit := spk_morse
 
         cli                 ; enable interrupts by clearing the disable flag
 
-        lda #<splash        ; show splash
+        lda #<splash        ; show splash screen
         sta LCDBUFP
         lda #>splash
         sta LCDBUFP+1
         lda #(donut - splash)
         jsr lcd_puts
 
+        lda #' '
+        jsr morse_send
         lda #'K'
         jsr morse_send       ; good to go
 
+.if DEBUG
         lda #'e'
         jsr PUTC
         lda VIA_IER
@@ -91,6 +96,7 @@ _morse_emit := spk_morse
         jsr PUTC
         lda VIA_SR
         jsr _wozmon::PRBYTE
+.endif
 
         jmp _wozmon::main
 

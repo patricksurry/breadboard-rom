@@ -1,6 +1,8 @@
 Development
 ---
 
+    make
+
     py65mon -m 65c02 -l rom.bin -a 8000
 
     micromamba activate eeprom-writer
@@ -11,10 +13,9 @@ TODO
 ---
 
 - kbd flaky?
-- print kbd layout, add wozmon keys; default to straight wozmon pad vs hex input?
-- can't share PB7, move lcd to port-a or use 4-bit mode
-- too many blank lines in wozmon
-- if wrap to top, cls?
+- print kbd layout, add wozmon keys (0-9A-F : . R bksp esc cr); default to straight wozmon pad vs hex input?
+- too many blank lines in wozmon?
+- if lcd wrap to top, cls?
 
 - try beethoven notes
 

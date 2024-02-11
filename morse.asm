@@ -4,12 +4,18 @@
 
 morse_emit:  .res 2    ; pointer to output routine.
 
-    ; C=1 indicates 'on' for dit/dah and C=0 means 'off' for silent
-    ; Y contains the symbol length (1 for dit, 3 for dah; or 1, 2, 4 for silences)
-    ; A and Y can be stomped
-    ; for an LED or speaker the code can be very simple:
 /*
-my_emit:
+We can emit morse code on any desired output device (speaker, LED, text, ...)
+by providing a morse_emit routine.  This routine simply sends on/off signals
+for a specified duration.  The on symbols are the normal dit/dah (dot/dash)
+and the off symbols represent spaces between symbols, characters and words.
+
+The routine receives C=on/off in the carry bit with Y=1,2,3,4 as the duration units.
+It can use morse_delay(Y) to wait for the appropriate duration.
+It needn't preserve any registers.  For an LED or speaker pin it can be very simple (below).
+See also morse_puts as an example of emitting a text representation like "... --- ..."
+
+simple_emitter: ; (C, Y) -> nil
         bcc wait        ; signal is normally off
         signal(on)
 wait:   jsr morse_delay
@@ -19,7 +25,7 @@ wait:   jsr morse_delay
 
     .segment "CODE"
 
-morse_delay:
+morse_delay:    ; (Y) -> nil const X
     ; delay for about Y * 100ms where <= 6
     .scope _morse_delay
         lda #42
@@ -32,7 +38,7 @@ done:   jmp delay
     .endscope
 
     .if PYMON = 1
-morse_puts:
+morse_puts: ; (C, Y) -> nil const X
     ; a more complex morse_emit routine that converts to a string of dash, dot and space characters
     .scope _morse_puts
         bcc off     ; output space(s) for off
@@ -57,7 +63,7 @@ done:   rts
     .endscope
     .endif
 
-morse_send:
+morse_send: ; (A) -> nil
     ; Output chr A in morse code.  The ascii characters [0-9A-Za-z] and [space] are recognized.
     ; All other characters are sent as the error prosign (........) aka H^H.
     ; Normally each character is followed by an intra letter space (silent dah)
@@ -130,7 +136,7 @@ end:                    ; ... then ' ' adds off(4) to give off(1)+off(2)+off(4) 
     .endscope
 
     .if PYMON = 1
-morse_test:
+morse_test: ; () -> nil
     .scope _morse_test
         lda #<morse_puts
         sta morse_emit
