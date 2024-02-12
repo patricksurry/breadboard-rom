@@ -135,6 +135,33 @@ end:                    ; ... then ' ' adds off(4) to give off(1)+off(2)+off(4) 
         jmp (morse_emit)    ; jump to output routine and return from there
     .endscope
 
+
+morse_nibble: ; (A) -> nil
+    ; send the lower four bits of A as morse sequence; hi-bit to elide with next
+        ldy #$4
+        asl
+        php         ; stash carry (msb)
+        asl
+        asl
+        asl
+        ldy #3      ; send 3+1 bits
+        jmp _morse_send::emit
+
+
+morse_byte: ; (A) -> nil
+    ; send the byte A as a morse sequence (msb first), by eliding the top and bottom nibbles
+        pha
+        lsr
+        lsr
+        lsr
+        lsr
+        ora #%1000_0000 ; high bit to elide
+        jsr morse_nibble
+        pla
+        and #$0f
+        jmp morse_nibble
+
+
     .if PYMON = 1
 morse_test: ; () -> nil
     .scope _morse_test
@@ -144,11 +171,22 @@ morse_test: ; () -> nil
         sta morse_emit+1
         ldx #0
 next:   lda morse_test_data, X
-        beq quit
+        beq bits
         jsr morse_send
         inx
         bne next
-quit:   brk
+
+bits:   lda #' '
+        jsr morse_send
+        lda #$0c
+        jsr morse_nibble
+        lda #' '
+        jsr morse_send
+        lda #$59
+        jsr morse_byte
+        lda #' '
+        jsr morse_send
+        brk
 
 morse_test_data:
         .byte "6502 WHAT? SOS ", 'S'|$80, 'O'|$80, 'S', 0
