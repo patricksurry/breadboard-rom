@@ -1,11 +1,11 @@
 
-    .segment "ZEROPAGE"
+    .zeropage
 
 spk_duty: .res 2
 
 ; Beethoven's fifth GGGEb|FFFD played |-1114|-1114
 
-    .segment "CODE"
+    .code
 
 spk_init:   ; () -> nil const X, Y
     lda VIA_DDRB
@@ -85,7 +85,7 @@ for i in range(0, 12):
     print(f".byte ${duty & 0xff:02x}, ${duty >> 8:02x}   ; {note:3s}{octave} {freq:.1f}Hz  N={duty}")
 */
 
-    .segment "DATA"
+    .data
 spk_octave:         ; note octave freq duty
         .byte $e4   ; C     -2  8.2Hz  N=61156     midi note 0 is C(-2) @ 8.1758 Hz
         .byte $7c   ; C# Db -2  8.7Hz  N=57724

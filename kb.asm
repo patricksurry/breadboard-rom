@@ -1,46 +1,23 @@
 /*
-Writing IER is special:
-- when hi bit clear, set bit 0-6 to clear corresponding IER bit
-- when hi bit set, set bit 0-6 to set corresponding IER bit
+originally we used shift-in under external clock, with the kbd generating the clock signal.
+
+now the keyboard shifts in to a '595 register and strobes a data ready line CA1
 */
 
-    /*
-The Shift Register (SR) performs bidirectional serial data transfers on line CB2
-Shift Register and Auxiliary Control Register Control ($0A, $0B)
-(msb) x x x 0 1 1 x x  Shift in under control of external clock (CB1)
+    .zeropage
 
-The SR counter will interrupt the microprocessor after each eight bits have been shifted in.
-Reading or writing the SR resets IFR2 and initializes the counter to count another eight
-pulses. Note that data is shifted during the first PHI2 clock cycle following the positive going edge
-of the CB1 shift pulse. For this reason, data must be held stable during the first full cycle following
-CB1 going high.
+KB_KEY7:    .res 1          ; bit 7 indicates key ready, with low seven bits of last chr
+KB_KEY8:    .res 1          ; last full 8-bit character received
 
-In this mode, CB1 serves as an input to the SR. In this way, an external device can load the SR at
-its own pace. The SR counter will interrupt the microprocessor after each eight bits have been
-shifted in. The SR counter does not stop the shifting operation. Its function is simply that of a pulse
-counter. Reading or writing the SR resets IFR2 and initializes the counter to count another eight
-pulses. Note that data is shifted during the first PHI2 clock cycle following the positive going edge
-of the CB1 shift pulse. For this reason, data must be held stable during the first full cycle following
-CB1 going high. See Figure 2-8
-
-Interrupt Flag Register ($0D) bit 2 (0x04) - interrupt on complete 8 shifts
-Interrupt Enable Register ($0E) set bit 2 to enable corresponding interrupt
-    */
-
-    .segment "ZEROPAGE"
-
-KB_KEY7:    .res 1               ; bit 7 indicates key ready, with low seven bits of last chr
-KB_KEY8:    .res 1               ; last full 8-bit character received
-
-    .segment "CODE"
+    .code
 
 kb_init:    ; () -> nil const X, Y
-    ; initialize VIA shift-in from keyboard
-        lda VIA_ACR
-        and #(255-VIA_SR_MASK)
-        ora #VIA_SR_IN_CB1      ; shift in using external (CB1) clock
-        sta VIA_ACR
-        lda #(VIA_IER_SET | VIA_INT_SR)     ; enable interrupt on shift complete
+    ; set up handshake mode and interrupt on data ready
+        lda VIA_PCR
+        and #(255-VIA_HS_CA1_MASK)
+        ora #VIA_HS_CA1_RISE
+        sta VIA_PCR
+        lda #(VIA_IER_SET | VIA_INT_CA1)
         sta VIA_IER
         rts
 
@@ -53,11 +30,29 @@ kb_getc:    ; () -> A const X, Y
         rts
 
 kb_isr:     ; () -> nil const A, X, Y
-    ; handle interrupt on shift in complete
+    ; handle interrupt when keyboard byte is available
         pha
-        lda VIA_SR      ; fetch the value shifted in
+
+        lda DVC_CTRL     ; stash current control bits
+        pha
+        lda DVC_DDR     ; stash current DDR bits
+        pha
+
+        ; select the KB shift-register for input
+        DVC_SET_CTRL #DVC_SLCT_KBD, DVC_SLCT_MASK
+
+        stz DVC_DDR      ; set data port for reading
+        lda DVC_DATA     ; fetch the value
+
         sta KB_KEY8     ; store original
         ora #$80        ; flag key ready
         sta KB_KEY7     ; store with top bit set for getc
+
+        ; restore control registers
+        pla
+        sta DVC_DDR
+        pla
+        sta DVC_CTRL     ; restore control register
+
         pla
         rti

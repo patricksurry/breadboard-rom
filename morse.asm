@@ -1,5 +1,5 @@
 
-    .segment "ZEROPAGE"
+    .zeropage
     ; pointer to routine that outputs one morse 'bit'
 
 morse_emit:  .res 2    ; pointer to output routine.
@@ -23,7 +23,7 @@ wait:   jsr morse_delay
         rts
 */
 
-    .segment "CODE"
+    .code
 
 morse_delay:    ; (Y) -> nil const X
     ; delay for about Y * 100ms where <= 6
@@ -155,7 +155,7 @@ morse_test_data:
     .endscope
     .endif
 
-    .segment "DATA"
+    .data
         ; morse characters stored one per byte, right-justified with a leading 1 prefix
         ; we shift left to find the first 1, and the remaining bits represent dit/dah symbols
         ; all the basic chars are 6 symbols or less, and any other can be formed by

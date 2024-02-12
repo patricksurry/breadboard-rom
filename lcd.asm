@@ -66,19 +66,12 @@ The destination (CGRAM or DDRAM) is determined by the most recent `Set RAM Addre
 LCD_WIDTH = 20
 LCD_HEIGHT = 4
 
-
 ; NB. the most common 16x1 display has its single physical row mapped to 0..$7, $40..$47
 ; as if it was 8x2.  This type isn't handled here.
 
-LCD_DATA := VIA_IORA        ; LCD D0..7 data pins mapped to VIA PORTA D0..7
-LCD_DDR  := VIA_DDRA        ; set to 0 for read DATA, #$ff to write DATA
-LCD_CTRL := VIA_IORB        ; RS, RW, E mapped to port B pins 0, 1, 2
-LCD_CDR  := VIA_DDRB
-
 LCD_RS = %0000_0001         ; register select 0 = command, 1 = data
 LCD_RW = %0000_0010         ; read = 1, write = 0
-.assert LCD_RW > LCD_RS, error, "lcd_do assumes RW pin > RS pin"
-LCD_E  = %0000_0100         ; toggle high to read/write
+.assert (LCD_RW | LCD_RS) & DVC_SLCT_MASK = 0, error, "lcd control pins overlap dvc select"
 
 ; Four actions based on RW/RS combinations
 LCD_CMD     = 0
@@ -88,13 +81,17 @@ LCD_READ    = LCD_RS | LCD_RW
 
 LCD_WAKE    = %0011_0000    ; wake value $30 (8 bit, 2 line)
 
-    .segment "ZEROPAGE"
+    .macro LCD_SET_CTRL v
+        DVC_SET_CTRL v, (DVC_SLCT_MASK | LCD_RS | LCD_RW)
+    .endmac
+
+    .zeropage
 LCDX:       .res 1
 LCDY:       .res 1
 LCDPAD:     .byte 0         ; for lcd_blit
 LCDBUFP:    .res 2
 
-    .segment "CODE"
+    .code
 
 lcd_cmd:    ; (Y) -> nil const X
     ; fall through to lcd_do with Y = data
@@ -104,43 +101,58 @@ lcd_do:     ; (A, Y) -> A const X
     ; perform the action A with data Y (for output actions)
     ; A = action (LCD_CMD, LCD_STATUS, LCD_READ, LCD_WRITE)
     ; Y = data (for LCD_CMD and LCD_WRITE)
-    ; on return A contains result for LCD_STATUS or LCD_READ
+    ; on return A contains result for LCD_STATUS or LCD_READ, 0 for others
     .scope _lcd_do
-        phx
-        tax
-        stz LCD_DDR         ; set data for read
-        lda #LCD_STATUS     ; wait for LCD ready
-        sta LCD_CTRL
-        ora #LCD_E
-        sta LCD_CTRL        ; enable to read status
-busy:   lda LCD_DATA
+        phx                 ; preserve X reg
+        tax                 ; stash cmd in X
+        stz DVC_DDR         ; set data port for reading
+        LCD_SET_CTRL #LCD_STATUS ; set up for LCD ready check
+        ora #DVC_SLCT_LCD
+        sta DVC_CTRL        ; set enable to read status
+busy:   lda DVC_DATA
     .if .not ::PYMON
         bmi busy            ; wait for bit 7 to clear
     .endif
-        stx LCD_CTRL        ; set up new action, clearing E
-        cpx #LCD_RW         ; RW=1 (read)?      NB ** assumes LCD_RW > LCD_RS
-        bmi wc              ; else write or cmd
+        cpx #LCD_STATUS     ; status request?
+        bne cont
 
-        cpx #LCD_STATUS
-        beq done            ; A already has status result (LCD addr)
+        ; ... already done, just move result to X (LCD curr addr), disable and return
+        tax
+        bra off
 
-        lda #LCD_READ | LCD_E   ; else it's read
-        sta LCD_CTRL        ; pulse on
-        lda LCD_DATA        ; fetch result
+cont:   lda #DVC_SLCT_MASK  ; stop the status check
+        trb DVC_CTRL
+
+        stx VIA_TMP         ; set up new action, leaving A=ctrl bits
+        LCD_SET_CTRL VIA_TMP
+        ora #DVC_SLCT_LCD   ; prepare A to enable
+
+        cpx #LCD_READ
+        bne wc
+
+        ; it's a read command
+        sta DVC_CTRL        ; pulse enable to read
+        ldx DVC_DATA        ; fetch result
         bra off             ; pulse off and return
 
-nowait: phx                 ; alternate entry for no wait init
-        tax
-        stx LCD_CTRL
+nowait_cmd:
+        ; alternate entry for no wait init
+        phx                 ; stash X
+        LCD_SET_CTRL #LCD_CMD      ; set up command
+        ora #DVC_SLCT_LCD   ; prep A for enable
 
-wc:     lda #$ff
-        sta LCD_DDR         ; set data pins for write
-        sty LCD_DATA        ; write the operand
-        txa
-        ora #LCD_E
-        sta LCD_CTRL
-off:    stx LCD_CTRL        ; pulse off
-done:   plx
+wc:
+        ; process write or cmd by writing Y
+        ldx #$ff
+        stx DVC_DDR         ; set data pins for write
+        inx                 ; set X=0 as result
+        sty DVC_DATA        ; set up the request operand
+        sta DVC_CTRL        ; pulse to trigger write
+
+off:    lda #DVC_SLCT_MASK
+        trb DVC_CTRL        ; pulse off
+        txa                 ; put result in A (byte read or 0 for write/cmd)
+        plx                 ; restore X
         rts
     .endscope
 
@@ -149,17 +161,13 @@ lcd_init:   ; () -> nil
     ; wake up the LCD and send sequence of initialization commands
     .scope _lcd_init
         lda #$ff
-        sta LCD_DDR         ; set all data bits for output
-        lda LCD_CDR
-        ora #(LCD_E | LCD_RS | LCD_RW)
-        sta LCD_CDR         ; set ctrl bits to output
+        sta DVC_DDR         ; set all data bits for output
 
         ldx #3              ; beetlejuice, beetlejuice, beetlejuice
 wakeywakey:
         ; assume that manual reset is at least 40ms+ after power on, so skip explicit initial wait
-        lda #LCD_CMD
         ldy #LCD_WAKE
-        jsr _lcd_do::nowait
+        jsr _lcd_do::nowait_cmd
         cpx #3
         bne short
         ; wait 5ms+ after first call

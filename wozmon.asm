@@ -1,4 +1,4 @@
-    .segment "ZEROPAGE"
+    .zeropage
 
 XAM:    .res 2                          ; Last "opened" location
 ST:     .res 2                          ; Store address

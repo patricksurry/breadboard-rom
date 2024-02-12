@@ -41,6 +41,8 @@ hello:
         ldx #$ff
         txs                 ; init stack
 
+        jsr via_init
+
     .if PYMON = 1
 _morse_emit := morse_puts
     .else
@@ -54,7 +56,7 @@ _morse_emit := spk_morse
         lda #>_morse_emit
         sta morse_emit+1
 
-        lda #('A' | $80)    ; prosign "wait" elides A^S
+        lda #('A' | $80)    ; prosign "wait" elides A^S  ._...
         jsr morse_send
         lda #'S'
         jsr morse_send
@@ -74,7 +76,7 @@ _morse_emit := spk_morse
         lda #' '
         jsr morse_send
         lda #'K'
-        jsr morse_send       ; good to go
+        jsr morse_send       ; good to go -.-
 
 .if DEBUG
         lda #'e'
@@ -134,7 +136,7 @@ pymon_getc:
         rts
     .endif
 
-    .segment "DATA"
+    .data
 
 splash:
         .byte "    ___      ___    "

@@ -3,11 +3,16 @@ Development
 
     make
 
-    py65mon -m 65c02 -l rom.bin -a 8000
 
     micromamba activate eeprom-writer
 
     python ../eeprom-writer/zwrite.py rom.bin
+
+For debugging, set PYMON=1 in rom.asm, rebuild
+
+    py65mon -m 65c02 -l rom.bin -a 8000 -b rom.sym
+
+    g .hello
 
 TODO
 ---

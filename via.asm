@@ -18,6 +18,24 @@ VIA_IFR  := VIA + $d    ; interrupt flags
 VIA_IER  := VIA + $e    ; write bit 7 hi + bits to set, or bit 7 lo + bits to clear
 VIA_IORA_ := VIA + $f
 
+; NB writing IER is special: clear bits 0-6 by setting bit7=0 with 1s in bits to clear,
+; set bits 0-6 by setting bit7=1 with 1s in bits to set
+
+; two bits of PORTB select the active device on PORTA
+DVC_SLCT_MASK = %0000_1100
+DVC_SLCT_NONE = %0000_0000
+DVC_SLCT_SD   = %0000_0100
+DVC_SLCT_KBD  = %0000_1000
+DVC_SLCT_LCD  = %0000_1100
+
+DVC_DATA := VIA_IORA        ; LCD D0..7 data pins mapped to VIA PORTA D0..7
+DVC_DDR  := VIA_DDRA        ; set to 0 for read DATA, #$ff to write DATA
+DVC_CTRL := VIA_IORB        ; RS, RW, E mapped to port B pins 0, 1, 2
+DVC_CDR  := VIA_DDRB
+
+
+; VIA_ACR flag values
+
 ; three VIA_SR control bits  ...x xx..
 VIA_SR_MASK     = %0001_1100
 
@@ -50,6 +68,55 @@ VIA_INT_SR  = %0000_0100    ; set on 8 shifts complete
 VIA_INT_CA1 = %0000_0010    ; set on CA1 active edge
 VIA_INT_CA2 = %0000_0001    ; set on CA2 active edge
 
+; VIA_PCR flag values
+
+VIA_HS_CA1_MASK  = %0000_0001
+VIA_HS_CA1_FALL  = %0000_0000
+VIA_HS_CA1_RISE  = %0000_0001
+
+VIA_HS_CA2_MASK  = %0000_1110
+VIA_HS_CA2_FALL  = %0000_0000
+VIA_HS_CA2_IFALL = %0000_0010
+VIA_HS_CA2_RISE  = %0000_0100
+VIA_HS_CA2_IRISE = %0000_0110
+VIA_HS_CA2_HAND  = %0000_1000
+VIA_HS_CA2_PULS  = %0000_1010
+VIA_HS_CA2_LOW   = %0000_1100
+VIA_HS_CA2_HIGH  = %0000_1110
+
+VIA_HS_CB1_MASK  = %0001_0000
+VIA_HS_CB1_FALL  = %0000_0000
+VIA_HS_CB1_RISE  = %0001_0000
+
+VIA_HS_CB2_MASK  = %1110_0000
+VIA_HS_CB2_FALL  = %0000_0000
+VIA_HS_CB2_IFALL = %0010_0000
+VIA_HS_CB2_RISE  = %0100_0000
+VIA_HS_CB2_IRISE = %0110_0000
+VIA_HS_CB2_HAND  = %1000_0000
+VIA_HS_CB2_PULS  = %1010_0000
+VIA_HS_CB2_LOW   = %1100_0000
+VIA_HS_CB2_HIGH  = %1110_0000
+
+
+    .zeropage
+VIA_TMP:    .res 1
+
+    .macro DVC_SET_CTRL val, mask
+        lda DVC_CTRL
+        and #(255-mask)
+        ora val
+        sta DVC_CTRL
+    .endmac
+
+    .code
+
+via_init:    ; () -> nil const X, Y
+        ; all dev control bits are outputs
+        stz DVC_CTRL
+        lda #$ff
+        sta DVC_CDR
+        rts
 
 .if DEBUG
 rollpbbit:  ; () -> nil const X, Y
