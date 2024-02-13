@@ -24,6 +24,7 @@ ESC     = $1B
     .include "via.asm"
     .include "kb.asm"
     .include "lcd.asm"
+    .include "sd.asm"
     .include "morse.asm"
     .include "speaker.asm"
     .include "wozmon.asm"
@@ -75,8 +76,28 @@ _morse_emit := spk_morse
 
         lda #' '
         jsr morse_send
-        lda #'K'
-        jsr morse_send       ; good to go -.-
+        lda #'V'
+        jsr morse_send       ; good to go ...-
+
+        ; try a song
+        lda #' '
+        jsr morse_send
+        lda #' '
+        jsr morse_send
+
+        lda #<twinkle
+        sta spk_notes
+        lda #>twinkle
+        sta spk_notes+1
+        jsr spk_play
+
+        lda #'S'
+        jsr PUTC
+        lda #'D'
+        jsr PUTC
+
+        jsr sd_init         ; try to init SD card
+        jsr _wozmon::PRBYTE ; print SD card result
 
 .if DEBUG
         lda #'e'

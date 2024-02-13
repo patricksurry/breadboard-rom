@@ -2,8 +2,8 @@
     .zeropage
 
 spk_duty: .res 2
-
-; Beethoven's fifth GGGEb|FFFD played |-1114|-1114
+spk_notes: .res 2
+spk_delay16: .res 2   ; the two byte delay() constant for one sixteenth of a beat
 
     .code
 
@@ -47,15 +47,16 @@ done:   lda VIA_ACR
 
 spk_morse:  ; (Y, C) -> nil
     ; emit morse signal C=on/off for Y units (1,2,3,4)
-    .scope _spk_morse
-        bcc wait        ; signal is normally off
+        bcc @wait       ; signal is normally off
+        tya             ; vary tone for dit and dah
+        asl             ; y = 1/3 => a = 2/6
+        eor #$ff        ; -2/-6
+        adc #68         ; carry is set, so A => 67 for dit, 63 for dah
         phy
-        lda #48
         jsr spk_tone
         ply
-wait:   jsr morse_delay
+@wait:  jsr morse_delay
         ; fall through to spk_off
-    .endscope
 
 spk_off:    ; () -> nil const X, Y
     ; turn off the speaker
@@ -64,6 +65,55 @@ spk_off:    ; () -> nil const X, Y
         ora #VIA_T1_ONCE    ; disable PB7 square wave
         sta VIA_ACR
         rts
+
+spk_play:
+        lda (spk_notes)     ; read the two byte timing header for delay value
+        sta spk_delay16
+        ldy #1
+        lda (spk_notes),y
+        sta spk_delay16+1
+@loop:  clc
+        lda #2
+        adc spk_notes
+        sta spk_notes
+        bcc @note
+        inc spk_notes+1
+@note:  lda (spk_notes)     ; get next note
+        beq @rest           ; 0 means rest
+        jsr spk_tone
+@rest:  ldy #1
+        lda (spk_notes),y   ; get delay count
+        beq @done           ; 0 means end
+        tax
+@more:  ldy spk_delay16
+        lda spk_delay16+1
+        jsr delay
+        dex
+        bne @more
+        jsr spk_off
+        bra @loop
+@done:  rts
+
+
+/*
+We'll measure tempo using the delay constant for one sixteenth of a beata:
+
+120 bmp = 0.5 sec/beat = 1/32 sec per 16th; 31250us => 3472 delay const
+60 bpm = 1 sec/beat = 1/16 sec per 16th => 6944 delay const
+30 bpm = 2 sec/beat = 1/8 sec per 16th => 13889 delay const
+
+And we'll write note duration d in 16ths of a beat.  So we just call delay() d times
+with the appropriate constant
+*/
+
+
+    .data
+twinkle:
+    .word $1000
+    .byte 72,16, 72,16, 79,16, 79,16, 81,16, 81,16, 79,32, 77,16, 77,16, 76,16, 76,16, 74,16, 74,16, 72,32
+    .byte 0,0
+
+; Beethoven's fifth GGGEb|FFFD played |-1114|-1114
 
 /*
 The frequency of the i-th key on a 88 key piano, with i=69 corresponding to A4 @ 440Hz,
