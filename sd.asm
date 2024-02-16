@@ -9,25 +9,28 @@ We use two chained D-flip flop to invert and delay the CB1 clock by a full PHI2 
 
 Timing diagram (https://wavedrom.com/editor.html):
 
-    {
+ {
     signal: [
-        {name: 'ϕ2',    wave: 'N.....................'},
-        {name: 'WR',    wave: 'lhl...................'},
-        {name: 'CB1',   wave: 'h.n.......h', phase: 0.5, period: 2},
-        {name: 'CB2',   wave: 'xx========.', phase: 0.15, period: 2, data: [7,6,5,4,3,2,1,0]},
-        {name: 'ϕ1',    wave: 'P.....................'},
-        {name: "CB1'",  wave: 'h.n.......h', phase: 0, period: 2},
-        {name: "CB1''", wave: 'h.n.......h', phase: -0.5, period: 2},
-        {name: 'SCK',   wave: 'l.P.......l', phase: -0.5, period: 2},
+      {name: 'ϕ2',    wave: 'N.....................'},
+      {name: 'op',    wave: "=.x..............=...x", data: ['STA SR', 'LDA PA']},
+      {name: 'SO',    wave: 'lhl...................'},
+      {name: 'RD',    wave: 'l...................hl'},
+      {name: 'CB1',   wave: 'h.n.......h', phase: 0.5, period: 2},
+      {name: 'CB2',   wave: 'xx========.', phase: 0.15, period: 2, data: [7,6,5,4,3,2,1,0]},
+      {name: 'ϕ1',    wave: 'P.....................'},
+      {name: "CB1'",  wave: 'h.n.......h', phase: 0, period: 2},
+      {name: "CB1''", wave: 'h.n.......h', phase: -0.5, period: 2},
+      {name: 'SCK',   wave: 'l.P.......l', phase: -0.5, period: 2},
+      {name: '? RCK',   wave: 'l..H.......l.......H..', phase: -0.5},
     ],
     head:{
         text: 'VIA shift out ϕ2 → SPI mode 0 (18 cycles)',
-        tock:0,
+        tock:-2,
     },
     foot: {
         text: 'CB2 data lags CB1 by half a ϕ cycle, so we convert CB1 → SPI-0 SCK by inverting and delaying a full ϕ cycle using two chained D flip-flops'
     }
-    }
+ }
 
 See also http://forum.6502.org/viewtopic.php?t=1674
 
