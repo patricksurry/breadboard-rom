@@ -15,12 +15,7 @@ GETC    := kb_getc
 
 PUTC  := lcd_putc           ; patched internally to route to pymon_putc
 
-BKSP    = $08                           ; special char constants
-TAB     = $09
-LF      = $0A
-CR      = $0D
-ESC     = $1B
-
+    .include "util.asm"
     .include "via.asm"
     .include "kb.asm"
     .include "lcd.asm"
@@ -52,10 +47,7 @@ _morse_emit := spk_morse
 
         jsr spk_init
 
-        lda #<_morse_emit
-        sta morse_emit
-        lda #>_morse_emit
-        sta morse_emit+1
+        SETWC morse_emit, _morse_emit
 
         lda #('A' | $80)    ; prosign "wait" elides A^S  ._...
         jsr morse_send
@@ -67,10 +59,8 @@ _morse_emit := spk_morse
 
         cli                 ; enable interrupts by clearing the disable flag
 
-        lda #<splash        ; show splash screen
-        sta LCDBUFP
-        lda #>splash
-        sta LCDBUFP+1
+        ; show splash screen
+        SETWC LCDBUFP, splash
         lda #(donut - splash)
         jsr lcd_puts
 
@@ -79,17 +69,12 @@ _morse_emit := spk_morse
         lda #'V'
         jsr morse_send       ; good to go ...-
 
-        ; try a song
-        lda #' '
-        jsr morse_send
-        lda #' '
-        jsr morse_send
+        lda #$ff
+        jsr delay
 
-        lda #<twinkle
-        sta spk_notes
-        lda #>twinkle
-        sta spk_notes+1
-        jsr spk_play
+; try a song
+;        SETWC spk_notes, twinkle
+;        jsr spk_play
 
         lda #'S'
         jsr PUTC
@@ -97,37 +82,30 @@ _morse_emit := spk_morse
         jsr PUTC
 
         jsr sd_init         ; try to init SD card
-        jsr _wozmon::PRBYTE ; print SD card result
+        beq @sdrd
+        phx
+        jsr PRBYTE ; print err code
+        pla
+        jsr PRBYTE ; print err cmd
+        bra @woz
 
-.if DEBUG
-        lda #'e'
+@sdrd:  lda #'R'
         jsr PUTC
-        lda VIA_IER
-        jsr _wozmon::PRBYTE
+        SETDWC sd_blk, $00002000
+        SETWC sd_bufp, $1000
+        jsr sd_readblock
+        phx
+        jsr PRBYTE ; print readblock status
+        pla
+        jsr PRBYTE ; print X
 
-        lda #'f'
-        jsr PUTC
-        lda VIA_IFR
-        jsr _wozmon::PRBYTE
+        lda $1052
+        jsr PUTC            ; should be 'F' from FAT32
 
-        lda #'a'
-        jsr PUTC
-        lda VIA_ACR
-        jsr _wozmon::PRBYTE
-
-        lda #'s'
-        jsr PUTC
-        lda VIA_SR
-        jsr _wozmon::PRBYTE
-.endif
-
-        jmp _wozmon::main
+@woz:   jmp wozmon
 
     .if 0
-        lda #<(donut + 43*2 + 2)
-        sta LCDBUFP
-        lda #>(donut + 43*2 + 2)
-        sta LCDBUFP+1
+        SETWC LCDBUFP, donut + 43*2 + 2
         lda #23
         sta LCDPAD
         jsr lcd_blit
@@ -135,17 +113,6 @@ _morse_emit := spk_morse
 forever:
         jmp forever
     .endif
-
-; delay 9*(256*A+Y)+12 cycles = 2304 A + 9 Y + 12 cycles
-; at 1MHz about 2.3 A ms + (9Y + 12) us
-; max delay 9*65535+12 is about 590ms
-; credit http://forum.6502.org/viewtopic.php?f=12&t=5271&start=0#p62581
-delay:
-        cpy #1      ; 2 cycles
-        dey         ; 2 cycles
-        sbc #0      ; 2 cycles
-        bcs delay   ; 2 cycles + 1 if branch occurs (same page)
-        rts         ; 6 cycles (+ 6 for call)
 
     .if PYMON
 pymon_putc:

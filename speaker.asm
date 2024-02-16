@@ -66,6 +66,8 @@ spk_off:    ; () -> nil const X, Y
         sta VIA_ACR
         rts
 
+;TODO only hi byte for delay, other byte for vol(say),
+; notes <128 so could use hi bit as flag
 spk_play:
         lda (spk_notes)     ; read the two byte timing header for delay value
         sta spk_delay16
@@ -94,6 +96,37 @@ spk_play:
         bra @loop
 @done:  rts
 
+/*
+Simplifed ABC notation, see https://abcnotation.com/wiki/abc:standard:v2.1
+
+https://en.wikipedia.org/wiki/Key_signature
+https://en.wikipedia.org/wiki/Circle_of_fifths
+
+Notes
+        A  A# B  C  C# D  D# E  F  F# G  G#
+           Bb       Db    Eb       Gb    Ab
+index:  0  1  2  3  4  5  6  7  8  9  a  b
+fifth: +3 -2 +5  0 -5 +2 -3 +4 -1 +6 +1 -4      ; inc by 7 mod 12
+
+Circle of fifths:
+
+        Cb Gb Db Ab Eb Bb F  C  G  D  A  E  B  F# C#
+        2  9  4  b  6  1  8  3  a  5  0  7  2  9  4
+        7b 6b 5b 4b 3b 2b 1b 0  1# 2# 3# 4# 5# 6# 7#
+
+Order of sharps/flats on natural notes:
+
+        F  C  G  D  A  E  B
+        1# 2# 3# 4# 5# 6# 7#
+        7b 6b 5b 4b 3b 2b 1b
+fifth:  -1  0 +1 +2 +3 +4 +5
+
+Given a key signature, look up fifth and write as key = sgn * |key|.
+sgn = +1 means sharps, -1 means flats.  |key| gives number.
+For sgn = +1, natural notes with fifth + 1 < |key| are sharp.
+For sgn = -1, natural notes with fifth + 1 > 6 - |key| are flat.
+
+*/
 
 /*
 We'll measure tempo using the delay constant for one sixteenth of a beata:

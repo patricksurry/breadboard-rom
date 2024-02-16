@@ -165,10 +165,7 @@ morse_byte: ; (A) -> nil
     .if PYMON = 1
 morse_test: ; () -> nil
     .scope _morse_test
-        lda #<morse_puts
-        sta morse_emit
-        lda #>morse_puts
-        sta morse_emit+1
+        SETWC morse_emit, morse_puts
         ldx #0
 next:   lda morse_test_data, X
         beq bits

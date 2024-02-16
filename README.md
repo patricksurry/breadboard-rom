@@ -14,6 +14,8 @@ For debugging, set PYMON=1 in rom.asm, rebuild
 
     g .hello
 
+
+    sudo dd bs=512 count=1 if=/dev/disk2 | hexdump -C
 TODO
 ---
 
