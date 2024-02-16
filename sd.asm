@@ -59,8 +59,6 @@ sd_bufp:    ; or two byte pointer to data buffer
     .res 2
 sd_blk:     ; four byte block index (little endian)
     .res 4
-sd_tmp:
-    .res 1
 
     .code
 
@@ -209,7 +207,7 @@ sd_readblock:
         ; unroll first loop step to interpose indexing stuff between write/write
 
         ldx #$ff
-        stx sd_tmp          ; page indicator
+        bit sd_cmd0         ; set overflow as page 0 indicator (all cmd bytes have bit 6 set)
         stx VIA_SR          ; 4 cycles      trigger first byte in
         DELAY12
         ldy #0              ; 2 cycles      byte counter
@@ -220,10 +218,11 @@ sd_readblock:
         iny                 ; 2 cycles
         bne @next           ; 2(+1) cycles
         inc sd_bufp+1
-        inc sd_tmp          ; $ff -> 00 for second page
-        beq @next
+        bvc @crc            ; second page?
+        clv                 ; clear overflow for second page
+        bra @next
 
-        dec sd_bufp+1       ; restore buffer pointer
+@crc:   dec sd_bufp+1       ; restore buffer pointer
 
         ;TODO check crc-16
         lda DVC_DATA        ; first byte of crc-16

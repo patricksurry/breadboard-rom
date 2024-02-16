@@ -19,7 +19,7 @@ For debugging, set PYMON=1 in rom.asm, rebuild
 TODO
 ---
 
-- kbd flaky?
+- kbd flaky? -pulldowns
 - print kbd layout, add wozmon keys (0-9A-F : . R bksp esc cr); default to straight wozmon pad vs hex input?
 - too many blank lines in wozmon?
 - if lcd wrap to top, cls?
