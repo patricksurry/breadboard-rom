@@ -3,8 +3,8 @@
     .feature underline_in_numbers
     .feature string_escapes
 
-PYMON = 0   ; emulation with no actual hardware
-DEBUG = 0   ; include additional debugging code
+RAM_TOP := $4000            ; top r/w memory
+PYMON = 0                   ; emulation with no actual hardware
 
     .if PYMON
         .out "** Building debug ROM for pymon **"
@@ -20,6 +20,7 @@ PUTC  := lcd_putc           ; patched internally to route to pymon_putc
     .include "kb.asm"
     .include "lcd.asm"
     .include "sd.asm"
+    .include "p8drv.asm"
     .include "morse.asm"
     .include "speaker.asm"
     .include "wozmon.asm"
@@ -61,7 +62,6 @@ _morse_emit := spk_morse
 
         ; show splash screen
         SETWC LCDBUFP, splash
-        lda #(donut - splash)
         jsr lcd_puts
 
         lda #' '
@@ -82,13 +82,31 @@ _morse_emit := spk_morse
         jsr PUTC
 
         jsr sd_init         ; try to init SD card
-        beq @sdrd
+        beq @sdok
+
         phx
         jsr PRBYTE ; print err code
         pla
         jsr PRBYTE ; print err cmd
         bra @woz
 
+@sdok:  lda #'P'
+        jsr PUTC
+        lda #'8'
+        jsr PUTC
+
+        jsr p8_init
+        bcc @p8ok
+
+        jsr PRBYTE
+        lda #'!'
+        jsr lcd_putc
+        bra @woz
+
+@p8ok:  SETWC LCDBUFP, ScratchBuffer
+        jsr lcd_puts
+
+    .if 0
 @sdrd:  lda #'R'
         jsr PUTC
         SETDWC sd_blk, $00002000
@@ -101,18 +119,9 @@ _morse_emit := spk_morse
 
         lda $1052
         jsr PUTC            ; should be 'F' from FAT32
+    .endif
 
 @woz:   jmp wozmon
-
-    .if 0
-        SETWC LCDBUFP, donut + 43*2 + 2
-        lda #23
-        sta LCDPAD
-        jsr lcd_blit
-
-forever:
-        jmp forever
-    .endif
 
     .if PYMON
 pymon_putc:
@@ -131,7 +140,9 @@ splash:
         .byte "   (o o)    (o o)   "
         .byte "  (  V  )  (  V  )  "
         .byte " /--m-m------m-m--/ "
+        .byte 0
 
+    .if 0
 donut:      ; https://www.a1k0n.net/2011/07/20/donut-math.html
         .byte "                                           "
         .byte "            @@@@@@@@                       "
@@ -156,3 +167,4 @@ donut:      ; https://www.a1k0n.net/2011/07/20/donut-math.html
         .byte "                 .........,,,,,,,,,        "
         .byte "                    .............          "
         .byte "                                           "
+    .endif

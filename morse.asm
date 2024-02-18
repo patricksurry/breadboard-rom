@@ -27,40 +27,37 @@ wait:   jsr morse_delay
 
 morse_delay:    ; (Y) -> nil const X
     ; delay for about Y * 100ms where <= 6
-    .scope _morse_delay
         lda #42
         clc
-longer: dey
-        beq done
+@more:  dey
+        beq @done
         adc #42         ; A = 42*Y
-        bra longer
-done:   jmp delay
-    .endscope
+        bra @more
+@done:  jmp delay
+
 
     .if PYMON = 1
 morse_puts: ; (C, Y) -> nil const X
     ; a more complex morse_emit routine that converts to a string of dash, dot and space characters
-    .scope _morse_puts
-        bcc off     ; output space(s) for off
+        bcc @off    ; output space(s) for off
         cpy #3      ; else on, dah or dit
-        bne dit
+        bne @dit
         lda #'-'    ; dah
-        bra on
-dit:    lda #'.'    ; dit
-on:     jmp PUTC    ; return from there
+        bra @on
+@dit:   lda #'.'    ; dit
+@on:    jmp PUTC    ; return from there
 
-off:    tya
+@off:   tya
         lsr
         tay
-        beq done
-loop:   lda #' '    ; output Y // 2 spaces
+        beq @done
+@loop:  lda #' '    ; output Y // 2 spaces
         phy
         jsr PUTC
         ply
         dey
-        bne loop
-done:   rts
-    .endscope
+        bne @loop
+@done:  rts
     .endif
 
 morse_send: ; (A) -> nil
@@ -73,67 +70,67 @@ morse_send: ; (A) -> nil
 
     ; morse_emit should point at a routine which handles output of individual symbols
     ; essentially setting your target output device on or off for N time units as described above
-    .scope _morse_send
 
         asl
         php         ; remember hi bit in the carry
         lsr         ; clear hi bit
         cmp #' '
-        bne notspc
+        bne @notsp
         plp         ; discard elide flag
         ldy #4      ; off(4) to extend prev inter-letter delay from 3 to 7 (silent dah-dit-dah)
         clc         ; signal off
-        bra end     ; skip to end with
-notspc: cmp #$40    ; letters vs numbers
-        bmi notaz
+        bra _morse_send_end     ; short circuit to end
+
+@notsp: cmp #$40    ; letters vs numbers
+        bmi @notaz
         and #$1f    ; A-Z/a-z is $41-$5A/$61-7A, mask to $01-$1A
         dec
         cmp #26
-        bpl error
+        bpl @error
         tay         ; A is index 0-25
         lda morse_az,y
-        bra prefix
+        bra @pfx
 
-notaz:  sec
+@notaz: sec
         sbc #$30        ; 0-9 is $30-39
-        bcc error
+        bcc @error
         cmp #10
-        bpl error
+        bpl @error
         tay
         lda morse_09,y
 
-prefix: ldy #6          ; at most 6+1 bits to shift out
-skip:   asl
-        bcs emit        ; found leading 1 ?
+@pfx:   ldy #6          ; at most 6+1 bits to shift out
+@skip:  asl
+        bcs _morse_send_emit        ; found leading 1 ?
         dey
-        bpl skip
+        bpl @skip
 
-error:  lda #0          ; error is 8 dits ........
+@error: lda #0          ; error is 8 dits ........
         ldy #7
 
-        ; shift out Y+1 msb of A
-emit:   asl             ; top bit => C
+_morse_send_emit:       ; shift out Y+1 msb of A
+        asl             ; top bit => C
         pha
         phy
         ldy #3
-        bcs on
+        bcs @on
         ldy #1
         sec             ; signal on
-on:     jsr end         ; output on(1 or 3)
+@on:    jsr @end        ; output on(1 or 3)
         ldy #1
         clc             ; signal off
-        jsr end         ; output off(1) for inter-symbol delay (silent dit)
+        jsr @end        ; output off(1) for inter-symbol delay (silent dit)
         ply
         pla
         dey
-        bpl emit
+        bpl _morse_send_emit
         plp             ; original high bit set means elide
-        bcc normal      ; no elide, add inter-character delay.  note C=0 already for off
+        bcc @nrml       ; no elide, add inter-character delay.  note C=0 already for off
         rts             ; if eliding just inter-symbol off(1) after chr (silent dit)
-normal: ldy #2          ; usually extend +off(2) (silent dah) ...
-end:                    ; ... then ' ' adds off(4) to give off(1)+off(2)+off(4) = off(7) between words
+@nrml:  ldy #2          ; usually extend +off(2) (silent dah) ...
+@end:
+_morse_send_end:        ; ... then ' ' adds off(4) to give off(1)+off(2)+off(4) = off(7) between words
         jmp (morse_emit)    ; jump to output routine and return from there
-    .endscope
 
 
 morse_nibble: ; (A) -> nil
@@ -145,7 +142,7 @@ morse_nibble: ; (A) -> nil
         asl
         asl
         ldy #3      ; send 3+1 bits
-        jmp _morse_send::emit
+        jmp _morse_send_emit
 
 
 morse_byte: ; (A) -> nil
@@ -164,16 +161,15 @@ morse_byte: ; (A) -> nil
 
     .if PYMON = 1
 morse_test: ; () -> nil
-    .scope _morse_test
         SETWC morse_emit, morse_puts
         ldx #0
-next:   lda morse_test_data, X
-        beq bits
+@next:  lda morse_test_data, X
+        beq @bits
         jsr morse_send
         inx
-        bne next
+        bne @next
 
-bits:   lda #' '
+@bits:  lda #' '
         jsr morse_send
         lda #$0c
         jsr morse_nibble
@@ -187,7 +183,6 @@ bits:   lda #' '
 
 morse_test_data:
         .byte "6502 WHAT? SOS ", 'S'|$80, 'O'|$80, 'S', 0
-    .endscope
     .endif
 
     .data

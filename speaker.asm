@@ -15,25 +15,24 @@ spk_init:   ; () -> nil const X, Y
 
 spk_tone:   ; (A) -> nil
     ; start playing midi note number in A (A=69 for A4 @ 440Hz; A=0 for C(-2))
-    .scope _spk_tone
         ldy #0              ; rewrite A as Y * 12 + (A % 12)
-noct:   cmp #12             ; Y = A // 12 (octave shifts)
-        bmi found
+@noct:  cmp #12             ; Y = A // 12 (octave shifts)
+        bmi @found
         sec
         sbc #12
         iny
-        bra noct
-found:  tax                 ; A is the remainder used to index the low octave
+        bra @noct
+@found: tax                 ; A is the remainder used to index the low octave
         lda spk_octave, x   ; get hi/lo from octave lookup
         sta spk_duty
         lda spk_octave+12, x
         sta spk_duty+1
-halve:  dey                 ; halve the note value Y times to get the duty cycle
-        bmi done
+@halve: dey                 ; halve the note value Y times to get the duty cycle
+        bmi @done
         lsr spk_duty+1
         ror spk_duty
-        bra halve
-done:   lda VIA_ACR
+        bra @halve
+@done:  lda VIA_ACR
         and #(255-VIA_T1_MASK)
         ora #VIA_T1_PB7_CTS ; enable PB7 square wave
         sta VIA_ACR
@@ -43,7 +42,6 @@ done:   lda VIA_ACR
         lda spk_duty+1
         sta VIA_T1C+1
         rts
-    .endscope
 
 spk_morse:  ; (Y, C) -> nil
     ; emit morse signal C=on/off for Y units (1,2,3,4)

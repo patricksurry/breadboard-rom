@@ -1,7 +1,6 @@
 /*
 Exchange data with SD card using SPI by pairing a '595 shift register with the VIA one.
 
-
 Trigger an exchange by writing to VIA SR using shift-out under PHI2
 This uses CB1 as clock (@ half the PHI2 rate) and CB2 as data.
 The SD card wants SPI mode 0 where the clock has a rising edge after the data is ready.
@@ -107,10 +106,7 @@ sd_init:    ; () -> A = 0 on success, err on failure, with X=cmd
 
         ldx #10
 
-@cmd55:
-        ; jsr _sd_await   ;TODO are these needed?
-
-        SETWC sd_cmdp, sd_cmd55
+@cmd55: SETWC sd_cmdp, sd_cmd55
         jsr _sd_command
         cmp #1
         bne @fail
@@ -146,18 +142,22 @@ _sd_exit:
         tya
         rts
 
+
 _sd_readbyte:   ; () -> A; X,Y const
+    ; trigger an SPI byte exchange and return the result
         lda #$ff            ; write a noop byte to exchange SR
         jsr _sd_writebyte
         DELAY12
         lda DVC_DATA        ; 4 cycles
         rts                 ; 6 cycles
 
+
 _sd_writebyte:  ; (A) -> nil; A,X,Y const
     ; writes A -> SD which reads SD -> DVC_DATA
         ; VIA write triggers SR exchange
         sta VIA_SR          ; 4 cycles
         rts                 ; 6 cycles
+
 
 _sd_command:     ; (sd_cmdp) -> A; X const
     ; write six bytes from (sd_cmdp), wait for result with a 0 bit
@@ -176,6 +176,18 @@ _sd_await:
         beq _sd_await
 
         rts
+
+
+    .data
+; see https://chlazza.nfshost.com/sdcardinfo.html
+            ;    %01...cmd, 32-bit argument,     %crc7...1
+sd_cmd0:    .byte $40 |  0,  $00,$00,$00,$00,  $94 | 1    ; GO_IDLE_STATE
+sd_cmd8:    .byte $40 |  8,  $00,$00,$01,$AA,  $86 | 1    ; SEND_IF_COND
+sd_cmd55:   .byte $40 | 55,  $00,$00,$00,$00,   $0 | 1    ; APP_CMD
+sd_cmd41:   .byte $40 | 41,  $40,$00,$00,$00,   $0 | 1    ; SD_SEND_OP_COND
+
+
+    .code
 
 sd_readblock:
     ; read the 512-byte with 32-bit index sd_blk to sd_bufp
@@ -234,9 +246,8 @@ sd_readblock:
         lda #0              ; success
         jmp _sd_exit
 
-; see https://chlazza.nfshost.com/sdcardinfo.html
-            ;    %01...cmd, 32-bit argument,     %crc7...1
-sd_cmd0:    .byte $40 |  0,  $00,$00,$00,$00,  $94 | 1    ; GO_IDLE_STATE
-sd_cmd8:    .byte $40 |  8,  $00,$00,$01,$AA,  $86 | 1    ; SEND_IF_COND
-sd_cmd55:   .byte $40 | 55,  $00,$00,$00,$00,   $0 | 1    ; APP_CMD
-sd_cmd41:   .byte $40 | 41,  $40,$00,$00,$00,   $0 | 1    ; SD_SEND_OP_COND
+
+sd_writeblock:
+    ;TODO write the 512-byte with 32-bit index sd_blk to sd_bufp
+        lda #0
+        jmp _sd_exit

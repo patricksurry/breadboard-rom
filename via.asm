@@ -4,6 +4,7 @@ with the lower four bits selecting register 0..15
 */
 
 VIA := $6000
+
 VIA_IORB := VIA + $0    ; port a/b latches
 VIA_IORA := VIA + $1
 VIA_DDRB := VIA + $2    ; data direction for port a/b pins (1=output, 0=input`)
@@ -118,18 +119,16 @@ via_init:    ; () -> nil const X, Y
         sta DVC_CDR
         rts
 
-.if DEBUG
+    .if 0
 rollpbbit:  ; () -> nil const X, Y
     ; test routine that rolls a bit back and forth forever on port b
-    .scope _rollpbbit
         inc
         sec
-right:  sta VIA_IORB
+@right: sta VIA_IORB
         ror
-        bne right
-left:   sta VIA_IORB
+        bne @right
+@left:  sta VIA_IORB
         rol
-        bne left
-        bra right
-    .endscope
-.endif
+        bne @left
+        bra @right
+    .endif

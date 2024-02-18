@@ -23,7 +23,6 @@ ESC     = $1B
     .endmac
 
     .code
-
 delay:  ; (A, Y) -> nil; X const
     ; delay 9*(256*A+Y)+12 cycles = 2304 A + 9 Y + 12 cycles
     ; at 1MHz about 2.3 A ms + (9Y + 12) us
