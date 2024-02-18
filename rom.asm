@@ -72,54 +72,35 @@ _morse_emit := spk_morse
         lda #$ff
         jsr delay
 
-; try a song
-;        SETWC spk_notes, twinkle
-;        jsr spk_play
+    .if 0
+        ; play a song
+        SETWC spk_notes, twinkle
+        jsr spk_play
+    .endif
 
+        ; low level SD card init
         lda #'S'
         jsr PUTC
         lda #'D'
         jsr PUTC
 
         jsr sd_init         ; try to init SD card
-        beq @sdok
+        bne @woz
 
-        phx
-        jsr PRBYTE ; print err code
-        pla
-        jsr PRBYTE ; print err cmd
-        bra @woz
-
-@sdok:  lda #'P'
+        ; Init ProDOS8 with SD card driver
+        lda #'P'
         jsr PUTC
         lda #'8'
         jsr PUTC
 
         jsr p8_init
-        bcc @p8ok
+        bcs @woz
 
-        jsr PRBYTE
-        lda #'!'
-        jsr lcd_putc
-        bra @woz
-
-@p8ok:  SETWC LCDBUFP, ScratchBuffer
+        ; show the file we read
+        SETWC LCDBUFP, ScratchBuffer
         jsr lcd_puts
 
-    .if 0
-@sdrd:  lda #'R'
-        jsr PUTC
-        SETDWC sd_blk, $00002000
-        SETWC sd_bufp, $1000
-        jsr sd_readblock
-        phx
-        jsr PRBYTE ; print readblock status
-        pla
-        jsr PRBYTE ; print X
-
-        lda $1052
-        jsr PUTC            ; should be 'F' from FAT32
-    .endif
+        jsr kb_getc     ; wait for key press
 
 @woz:   jmp wozmon
 

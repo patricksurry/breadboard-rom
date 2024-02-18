@@ -1,25 +1,27 @@
 Development
 ---
 
+Notes to self:
+
+    ; build rom.bin
     make
 
-
+    ; plug in arduino w/ eeprom shield and write
+    ; see https://github.com/patricksurry/eeprom-writer
     micromamba activate eeprom-writer
-
     python ../eeprom-writer/zwrite.py rom.bin
 
-For debugging, set PYMON=1 in rom.asm, rebuild
+For debugging, set PYMON=1 in rom.asm, rebuild with `make` then:
 
     py65mon -m 65c02 -l rom.bin -a 8000 -b rom.sym
 
     g .hello
 
 
-    sudo dd bs=512 count=1 if=/dev/disk2 | hexdump -C
+Creating an SD card prodos volume:
 
-Creating an SD image
-
-    # create a 32Mb image file
+    # create a 32Mb image file with pyprodos (or fave tool)
+    # see https://github.com/patricksurry/pyprodos
 
     % prodos bigvol.po create --name DEMOVOL
     % prodos bigvol.po import hhg.txt README
@@ -31,6 +33,8 @@ Creating an SD image
     # ... Unmount of all volumes on disk2 was successful ...
 
     # copy to the raw device (prefix 'r'): BE CAREFUL to target the right volume
+    # to write further logical prodos volumes, offset by 65536 blocks (32Mb)
+    # (so waste one empty block after each 65535 volume)
     sudo dd if=bigvol.po of=/dev/rdisk2 bs=1m
     # ... 31+1 records in
     # ... 31+1 records out
@@ -58,23 +62,9 @@ Creating an SD image
 TODO
 ---
 
-- kbd flaky? -pulldowns
-- print kbd layout, add wozmon keys (0-9A-F : . R bksp esc cr); default to straight wozmon pad vs hex input?
-- too many blank lines in wozmon?
-- if lcd wrap to top, cls?
-
-- try beethoven notes
-
-Notes
----
-
-fill c47f/2 ea
-fill c02d/1 00
-
-g c000  ; check breaks
-
-ab c536
-ab c545
-
-g c000
-registers x=0
+- [?] first key $7F, need init?; pulldowns?
+- [ ] print kbd layout
+- [ ] if lcd wrap to top, cls? clr to end of line?
+- [ ] lcd_wraps wrap string on spaces, get key before cls
+- [ ] split lcd into lcd_drv and txt ?
+- [ ] add larger lcd driver

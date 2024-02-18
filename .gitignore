@@ -3,3 +3,5 @@
 *.sym
 *.o
 *.mon
+roms/
+scratch/

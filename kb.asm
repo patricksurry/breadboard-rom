@@ -12,6 +12,9 @@ KB_KEY8:    .res 1          ; last full 8-bit character received
     .code
 
 kb_init:    ; () -> nil const X, Y
+    ; no keys yet
+        stz KB_KEY7
+        stz KB_KEY8
     ; set up handshake mode and interrupt on data ready
         lda VIA_PCR
         and #(255-VIA_HS_CA1_MASK)
