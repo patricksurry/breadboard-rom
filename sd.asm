@@ -179,7 +179,7 @@ _sd_await:
 
 
     .data
-; see https://chlazza.nfshost.com/sdcardinfo.html
+; see command descriptions at https://chlazza.nfshost.com/sdcardinfo.html
             ;    %01...cmd, 32-bit argument,     %crc7...1
 sd_cmd0:    .byte $40 |  0,  $00,$00,$00,$00,  $94 | 1    ; GO_IDLE_STATE
 sd_cmd8:    .byte $40 |  8,  $00,$00,$01,$AA,  $86 | 1    ; SEND_IF_COND

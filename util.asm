@@ -1,7 +1,9 @@
 BKSP    = $08                           ; special char constants
 TAB     = $09
-LF      = $0A
+NL      = $0A
+LF      = $0A       ; pymon NL
 CR      = $0D
+FF      = $0F
 ESC     = $1B
 
     .define DELAY2  cmp #0          ; 2 cycles

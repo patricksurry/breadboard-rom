@@ -291,7 +291,7 @@ lcd_putc:   ; (A) -> nil const X
 
 @nl:    ldy #$ff            ; advance until all bits in LCDX are clear (wrap)
         bra @fill
-@tab:   ldy #$03            ; advance until lower two bits in LCDX are cleara
+@tab:   ldy #$03            ; advance until lower two bits in LCDX are clear
 @fill:  phy
         lda #' '            ; fill until LCDX zeros all bits in Y
         jsr lcd_putb

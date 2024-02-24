@@ -62,9 +62,42 @@ Creating an SD card prodos volume:
 TODO
 ---
 
+- [ ] why does MLI open block @ $400 still fail?  test in demo
 - [?] first key $7F, need init?; pulldowns?
 - [ ] print kbd layout
 - [ ] if lcd wrap to top, cls? clr to end of line?
 - [ ] lcd_wraps wrap string on spaces, get key before cls
 - [ ] split lcd into lcd_drv and txt ?
 - [ ] add larger lcd driver
+
+
+Address decoding
+---
+
+$0000-$bfff RAM
+$c000-$c0ff I/O     1100_0000 0000_0000
+    - c0xf up to 16 x 16byte regions
+$c100-$ffff ROM
+
+IO: A15...A8 == 1100_0000
+ROM:  A15 & A14 & !IO
+RAM:  !(A15 & A14)
+
+'688 identity comparator has /P=Q
+6522 VIA   has CS1, /CS2
+27256 EPROM has /OE,  /CE
+62256 SRAM has  /OE,  /CS
+
+'688 + 1 NAND + 3 NOT (plus clock invert, led invert)
+
+RAM:
+    /CE = NOT(PHI2)
+    /OE = NOT(NAND(A14,A15))
+
+ROM:
+    /CE = NAND(A14,A15)
+    /OE = NOT(/P=Q)
+
+VIA:
+    /CS2 = /P=Q     ; >ADDR=C0
+    CS1 = true      ; or <ADDR = $0x
